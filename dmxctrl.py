@@ -20,12 +20,12 @@
 
 
 TITLE = 'DMXCtrl'
-VERSION = '0.3'
+VERSION = '0.2'
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 
 
 from gtktools import *
-from gi.repository import Gtk, GLib, Gdk #, GObject, Pango
+from gi.repository import Gtk, GLib #, Gdk, GObject, Pango
 #from gi.repository.GdkPixbuf import Pixbuf
 
 import sys
@@ -36,42 +36,11 @@ from ola.ClientWrapper import ClientWrapper
 from dmxctrldata import *
 
 
-__PALETTE_COLORS = (
-    (1.0, 0.0, 0.0),
-    (0.0, 1.0, 0.0),
-    (0.0, 0.0, 1.0),
-    (1.0, 0.0, 1.0),
-    (1.0, 1.0, 0.0),
-    (0.0, 1.0, 1.0),
-    (1.0, 1.0, 1.0))
-
-COLOR_BUTTON_PALETTE_COLS = len(__PALETTE_COLORS)
-
-def __init_palette():
-    pal = []
-
-    LEVELS = 8
-
-    for clevel in range(LEVELS - 1):
-        clevel /= LEVELS
-        clevel += (1.0 / LEVELS)
-
-        for r, g, b in __PALETTE_COLORS:
-            rgba = Gdk.RGBA(r * clevel, g * clevel, b * clevel, 1.0)
-            pal.append(rgba)
-
-    return pal
-
-
-COLOR_BUTTON_PALETTE = __init_palette()
-
-
 class ControlWidget():
     """Костыль для увязывания Gtk-виджета и dmxctrldata.Control"""
 
-    def __init__(self, conwnd, control):
-        self.conwnd = conwnd
-        self.widget = None
+    def __init__(self, control, widget):
+        self.widget = widget
         self.control = control
 
     def setMinLevel(self):
@@ -84,47 +53,7 @@ class ControlWidget():
         return 0
 
 
-class PanelWidget(ControlWidget):
-    def __init__(self, conwnd, control):
-        super().__init__(conwnd, control)
-
-        self.widget = Gtk.Frame.new(ctrl.name)
-        self.widget.set_label_align(0.5, 0.5)
-        self.widget.set_tooltip_text(control.getCommentStr())
-
-        cwgt = _children_widgets(ctrl)
-        cwgt.set_border_width(WIDGET_SPACING)
-
-        self.widget.add(cwgt)
-
-
 class LevelWidget(ControlWidget):
-    def __init__(self, conwnd, control):
-        super().__init__(conwnd, control)
-
-        self.widget = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
-
-        tts = level.getCommentStr()
-
-        slab = Gtk.Label.new(level.name)
-        slab.set_tooltip_text(tts)
-        if len(level.name) > 2:
-            slab.set_angle(270)
-
-        self.widget.pack_start(slab, False, False, 0)
-
-        #!!!
-        self.scale = Gtk.Scale.new(Gtk.Orientation.VERTICAL, None)
-        self.scale.set_tooltip_text(tts)
-        self.scale.set_draw_value(False)
-        self.scale.set_range(0, 255)
-        self.scale.set_inverted(True)
-
-        self.scale.connect('value-changed', self.level_changed, self)
-        self.consoleWidgets.append(lw)
-
-        self.widget.pack_start(scale, True, True, 0)
-
     def setMinLevel(self):
         self.widget.set_value(0)
 
@@ -133,29 +62,6 @@ class LevelWidget(ControlWidget):
 
     def getChannelValues(self):
         return [int(self.widget.get_value())]
-
-
-class ColorLevelWidget(LevelWidget):
-    def __init__(self, control, widget, clrbtn):
-        super().__init__(control, widget)
-
-        """if iscl:
-            rgba = Gdk.RGBA()
-            rgba.parse(level.color)
-
-            clrbtn = Gtk.ColorButton.new_with_rgba(rgba)
-            #clrbtn.set_use_alpha(False)
-            clrbtn.add_palette(Gtk.Orientation.VERTICAL, 1, None)
-            clrbtn.add_palette(Gtk.Orientation.VERTICAL,
-                               COLOR_BUTTON_PALETTE_COLS,
-                               COLOR_BUTTON_PALETTE)
-
-            widget.pack_end(clrbtn, False, False, 0)"""
-
-
-CONTROL_WIDGETS = {Panel: PanelWidget,
-    Level: LevelWidget,
-    ColorLevel: ColorLevelWidget}
 
 
 class MainWnd():
@@ -275,15 +181,48 @@ class MainWnd():
 
                     return box
 
-            ctltype = type(ctrl)
-            cwgtclass = CONTROL_WIDGETS.get(ctltype, None)
-            if cwgtclass is None:
-                raise Exception('Internal error: unimplemented support for control: %s' % ctltype.__name__)
+            def _make_level(level):
+                box = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
 
-            cwgt = cwgtclass(ctrl)
-            self.consoleWidgets.append(cwgt)
+                tts = level.getCommentStr()
 
-            return cwgt.widget
+                slab = Gtk.Label.new(level.name)
+                slab.set_tooltip_text(tts)
+                if len(level.name) > 2:
+                    slab.set_angle(270)
+
+                box.pack_start(slab, False, False, 0)
+
+                #!!!
+                scale = Gtk.Scale.new(Gtk.Orientation.VERTICAL, None)
+                scale.set_tooltip_text(tts)
+                scale.set_draw_value(False)
+                scale.set_range(0, 255)
+                scale.set_inverted(True)
+
+                lw = LevelWidget(level, scale)
+                scale.connect('value-changed', self.level_changed, lw)
+                self.consoleWidgets.append(lw)
+
+                box.pack_start(scale, True, True, 0)
+
+                return box
+
+            if isinstance(ctrl, Level):
+                return _make_level(ctrl)
+
+            elif isinstance(ctrl, Panel):
+                ret = Gtk.Frame.new(ctrl.name)
+                ret.set_label_align(0.5, 0.5)
+                ret.set_tooltip_text(ctrl.getCommentStr())
+
+                cwgt = _children_widgets(ctrl)
+                cwgt.set_border_width(WIDGET_SPACING)
+                ret.add(cwgt)
+                return ret
+
+            else:
+                raise Exception('Internal error: unimplemented support for control: %s' % ctrl.__class__.__name__)
 
         self.dmxSendEnabled = False
 

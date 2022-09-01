@@ -158,27 +158,6 @@ class Level(Regulator):
                 raise ValueError('value out of range')
 
 
-class ColorLevel(Level):
-    TAG = 'colorlevel'
-    OPTIONS = Level.OPTIONS | {'color'}
-    CHANNELS = 3
-
-    def __init__(self):
-        super().__init__()
-
-        self.color = '#000000'
-
-    def setParameter(self, ns, vs):
-        super().setParameter(ns, vs)
-
-        if ns == 'color':
-            #TODO возможно, стоит сделать более строгую проверку значения
-            if not vs.startswith('#') or len(vs) != 7:
-                raise ValueError('invalid color value')
-
-            self.color = vs
-
-
 class DMXControlsLoader(Container, xml.sax.ContentHandler):
     TAG = 'dmxcontrols'
     OPTIONS = Container.OPTIONS | {'universe'}
@@ -232,7 +211,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
             self.locator.getColumnNumber(),
             '' if not ss else ' (%s)' % ss)
 
-    CHILD_CLASSES = (Panel, Level, ColorLevel)
+    CHILD_CLASSES = (Panel, Level)
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -364,21 +343,8 @@ if __name__ == '__main__':
     dmxc = DMXControlsLoader('example.dmxctrl')
     #print(help(dmxc))
 
-    def _dump_dict(d):
-        r = []
-
-        for k, v in d.items():
-            r.append('%s="%s"' % (k, v))
-
-        return ', '.join(r)
-
     def __dump_ctl(ctl, indent):
-        print('%s%s %s:"%s" %s' % (
-                indent,
-                '=' if isinstance(ctl, Container) else '>',
-                ctl.__class__.__name__,
-                ctl.name,
-                '' if not isinstance(ctl, Regulator) else _dump_dict(ctl.__dict__)))
+        print('%s%s %s channel=%s' % (indent, '=' if isinstance(ctl, Container) else '>', ctl.name, ctl.channel))
 
         indent += ' '
 
