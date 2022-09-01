@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmxcontrols name="Example console">
+    Пример описания консоли<br/>ажно из двух строк
+    <panel name="Test panel">
+        Панель с тремя движками
+        <level name="R"/>
+        <level name="G"/>
+        <level name="B"/>
+    </panel>
+    <panel name="Other panel">
+        <level>Движок чего-то</level>
+        <panel name="Sub panel">
+            <level name="R" channel="100"/>
+            <level name="G"/>
+            <level name="B"/>
+        </panel>
+    </panel>
+    <level name="Something">
+    </level>
+    <panel>
+        <colorlevel name="CL">
+            Хрень какая-то
+        </colorlevel>
+    </panel>
+</dmxcontrols>
