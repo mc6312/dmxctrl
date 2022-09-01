@@ -14,8 +14,7 @@ distribdir = ~/downloads
 basename = dmxctrl
 srcversion = dmxctrl
 version = $(shell python3 -c 'from $(srcversion) import VERSION; print(VERSION)')
-branch =
-# $(shell git symbolic-ref --short HEAD)
+branch = $(shell git symbolic-ref --short HEAD)
 title_version = $(shell python3 -c 'from $(srcversion) import TITLE_VERSION; print(TITLE_VERSION)')
 title = $(shell python3 -c 'from $(srcversion) import TITLE; print(TITLE)')
 #
