@@ -20,7 +20,7 @@
 
 
 TITLE = 'DMXCtrl'
-VERSION = '0.3'
+VERSION = '0.4'
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 
 
@@ -67,48 +67,64 @@ COLOR_BUTTON_PALETTE = __init_palette()
 
 
 class ControlWidget():
-    """Костыль для увязывания Gtk-виджета и dmxctrldata.Control"""
+    """Костыль для увязывания Gtk-виджета и dmxctrldata.Control.
 
-    def __init__(self, conwnd, control):
-        self.conwnd = conwnd
+    Атрибуты:
+        widget      - экземпляр потомка Gtk.Widget, создаётся конструктором
+                      для добавления в UI, может содержать другие виджеты;
+        control     - экземпляр потомка dmxctrldata.Control, на основе
+                      которого создаются виджеты;
+        onChange    - callback - функция или метод, вызываемый при изменении
+                      значения виджетом;
+                      принимает один параметр - список значений для
+                      каналов DMX512."""
+
+    def __init__(self, control_, onChange_):
+        """Конструктор должен быть перекрыт классом-потомком"""
+
         self.widget = None
-        self.control = control
+        self.control = control_
+        self.onChange = onChange_
 
     def setMinLevel(self):
+        """Установка максимального значения"""
+
         pass
 
     def setMaxLevel(self):
+        """Установка минимального значения"""
         pass
 
     def getChannelValues(self):
-        return 0
+        return [0]
 
 
 class PanelWidget(ControlWidget):
-    def __init__(self, conwnd, control):
-        super().__init__(conwnd, control)
+    def __init__(self, control_, onChange_):
+        super().__init__(control_, onChange_)
 
-        self.widget = Gtk.Frame.new(ctrl.name)
+        self.widget = Gtk.Frame.new(control_.name)
         self.widget.set_label_align(0.5, 0.5)
-        self.widget.set_tooltip_text(control.getCommentStr())
+        self.widget.set_tooltip_text(control_.getCommentStr())
 
-        cwgt = _children_widgets(ctrl)
+        #FIXME эту хрень переделать
+        cwgt = _children_widgets(control_)
         cwgt.set_border_width(WIDGET_SPACING)
 
         self.widget.add(cwgt)
 
 
 class LevelWidget(ControlWidget):
-    def __init__(self, conwnd, control):
-        super().__init__(conwnd, control)
+    def __init__(self, control_, onChange_):
+        super().__init__(control_, onChange)
 
         self.widget = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
 
-        tts = level.getCommentStr()
+        tts = control_.getCommentStr()
 
-        slab = Gtk.Label.new(level.name)
+        slab = Gtk.Label.new(control_.name)
         slab.set_tooltip_text(tts)
-        if len(level.name) > 2:
+        if len(control_.name) > 2:
             slab.set_angle(270)
 
         self.widget.pack_start(slab, False, False, 0)
@@ -120,7 +136,7 @@ class LevelWidget(ControlWidget):
         self.scale.set_range(0, 255)
         self.scale.set_inverted(True)
 
-        self.scale.connect('value-changed', self.level_changed, self)
+        #self.scale.connect('value-changed', self.level_changed, self)
         self.consoleWidgets.append(lw)
 
         self.widget.pack_start(scale, True, True, 0)
@@ -136,8 +152,8 @@ class LevelWidget(ControlWidget):
 
 
 class ColorLevelWidget(LevelWidget):
-    def __init__(self, control, widget, clrbtn):
-        super().__init__(control, widget)
+    def __init__(self, control_, onChange_):
+        super().__init__(control_, onChange_)
 
         """if iscl:
             rgba = Gdk.RGBA()
@@ -280,27 +296,34 @@ class MainWnd():
             if cwgtclass is None:
                 raise Exception('Internal error: unimplemented support for control: %s' % ctltype.__name__)
 
-            cwgt = cwgtclass(ctrl)
+            cwgt = cwgtclass(ctrl, self.onControlChanged)
             self.consoleWidgets.append(cwgt)
 
             return cwgt.widget
 
         self.dmxSendEnabled = False
 
+        __step = ''
+
+        def __show_step():
+            print('%s...' % __step, file=sys.stderr)
+
         if self.consoleFile:
             try:
-                print('Loading console from "%s"...' % self.consoleFile, file=sys.stderr)
+                __step = 'Loading console from "%s"' % self.consoleFile
+                __show_step()
 
                 self.console = DMXControlsLoader(self.consoleFile)
 
                 self.headerBar.set_tooltip_text(self.console.getCommentStr())
 
+                __step = 'Building console UI'
+                __show_step()
                 for cc in self.console.children:
-                    #self.hboxControls.pack_start(_build_console_widgets(cc), False, False, 0)
                     self.boxControls.insert(_build_console_widgets(cc), -1)
 
             except Exception as ex:
-                self.show_exception('Error loading console description from file "%s".\n%s' % (self.consoleFile, ex))
+                self.show_exception('%s error.\n%s' % (__step, ex))
                 _clear_console()
 
         self.boxControls.show_all()
@@ -313,6 +336,9 @@ class MainWnd():
             st = self.console.name
 
         self.headerBar.set_subtitle(st)
+
+    def onControlChanged(self, chanValues):
+        print(f'onControlChanged({chanValues=})', file=sys.stderr)
 
     def btnAllLevelsMin_clicked(self, btn):
         for wctl in self.consoleWidgets:
