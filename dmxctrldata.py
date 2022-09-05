@@ -66,6 +66,20 @@ class Control():
 
         return int(s)
 
+    def strArgToBool(self, s):
+        """Преобразование строкового значения атрибута в булевское."""
+
+        try:
+            return bool(int(s))
+        except ValueError:
+            s = s.lower()
+            if s in ('true', 'yes'):
+                return True
+            elif s in ('false', 'no'):
+                return False
+            else:
+                raise ValueError('attribute value must be boolean or integer')
+
     def setParameter(self, ns, vs):
         """Установка значения атрибута экземпляра класса.
 
@@ -95,18 +109,42 @@ class Control():
 
 
 class NamedControl(Control):
-    OPTIONS = Control.OPTIONS | {'name'}
+    """Контрол с отображаемым именем.
+
+    Необязательные атрибуты (в дополнение к наследственным):
+    name        - строка, имя для отображения в UI;
+                  если не указано - при загрузке файла .dmxctrl
+                  присваивается имя по умолчанию - "ИмяТипа #N",
+                  где "N" - порядковый номер контрола;
+    icon        - строка, имя графического файла с иконкой;
+                  если не указано - в UI иконки не будет;
+    hidename    - булевское значение;
+                  если True - UI не должен отображать имя;
+                  на отображение иконки этот параметр не влияет;
+                  по умолчанию - False."""
+
+    OPTIONS = Control.OPTIONS | {'name', 'icon', 'hidename'}
 
     def __init__(self):
         super().__init__()
 
         self.name = ''
+        self.hidename = False
+        self.icon = None
+        # внутренний параметр - путь к файлу иконки,
+        # она будет загружаться при построении UI
+        self.iconName = None
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'name':
             self.name = vs
+        elif ns == 'icon':
+            # сама иконка загружается при построении UI
+            self.iconName = vs
+        elif ns == 'hidename':
+            self.hidename = self.strArgToBool(vs)
 
 
 class Container(NamedControl):
@@ -156,6 +194,27 @@ class Level(Regulator):
             self.value = self.strArgToInt(vs)
             if self.value < 0 or self.value > 255:
                 raise ValueError('value out of range')
+
+
+class ColorLevel(Level):
+    TAG = 'colorlevel'
+    OPTIONS = Level.OPTIONS | {'color'}
+    CHANNELS = 3
+
+    def __init__(self):
+        super().__init__()
+
+        self.color = '#000000'
+
+    def setParameter(self, ns, vs):
+        super().setParameter(ns, vs)
+
+        if ns == 'color':
+            #TODO возможно, стоит сделать более строгую проверку значения
+            if not vs.startswith('#') or len(vs) != 7:
+                raise ValueError('invalid color value')
+
+            self.color = vs
 
 
 class DMXControlsLoader(Container, xml.sax.ContentHandler):
@@ -211,7 +270,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
             self.locator.getColumnNumber(),
             '' if not ss else ' (%s)' % ss)
 
-    CHILD_CLASSES = (Panel, Level)
+    CHILD_CLASSES = (Panel, Level, ColorLevel)
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -343,8 +402,22 @@ if __name__ == '__main__':
     dmxc = DMXControlsLoader('example.dmxctrl')
     #print(help(dmxc))
 
+    def _dump_dict(d):
+        r = []
+
+        for k, v in d.items():
+            r.append('%s="%s"' % (k, v))
+
+        return ', '.join(r)
+
     def __dump_ctl(ctl, indent):
-        print('%s%s %s channel=%s' % (indent, '=' if isinstance(ctl, Container) else '>', ctl.name, ctl.channel))
+        print('%s%s %s:"%s"%s %s' % (
+                indent,
+                '=' if isinstance(ctl, Container) else '>',
+                ctl.__class__.__name__,
+                ctl.name,
+                '' if not ctl.icon else ' (%s)' % ctl.icon,
+                '' if not isinstance(ctl, Regulator) else _dump_dict(ctl.__dict__)))
 
         indent += ' '
 
