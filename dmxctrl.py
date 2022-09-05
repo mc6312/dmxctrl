@@ -22,13 +22,18 @@
 TITLE = 'DMXCtrl'
 VERSION = '0.4'
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
+COPYRIGHT = '🄯 2022 MC-6312'
+URL = 'https://github.com/mc6312/dmxctrl'
 
 
 from gtktools import *
 from gi.repository import Gtk, GLib, Gdk #, GObject, Pango
-#from gi.repository.GdkPixbuf import Pixbuf
+from gi.repository.GdkPixbuf import Pixbuf
+import cairo
+from math import pi
 
 import sys
+import os.path
 from traceback import format_exception
 from array import array
 from ola.ClientWrapper import ClientWrapper
@@ -36,34 +41,38 @@ from ola.ClientWrapper import ClientWrapper
 from dmxctrldata import *
 
 
-__PALETTE_COLORS = (
-    (1.0, 0.0, 0.0),
-    (0.0, 1.0, 0.0),
-    (0.0, 0.0, 1.0),
-    (1.0, 0.0, 1.0),
-    (1.0, 1.0, 0.0),
-    (0.0, 1.0, 1.0),
-    (1.0, 1.0, 1.0))
+from colorsys import hls_to_rgb
 
-COLOR_BUTTON_PALETTE_COLS = len(__PALETTE_COLORS)
+
+# значения цветов для функции hls_to_rgb()
+__HUE_360 = 1.0 / 360
+PALETTE_HUE_NAMES = {
+    'RED':      0.0,
+    'GREEN':    120 * __HUE_360,
+    'BLUE':     240 * __HUE_360,
+    'ORANGE':   30 * __HUE_360,
+    'YELLOW':   60 * __HUE_360,
+    'CYAN':     180 * __HUE_360,
+    'MAGENTA':  300 * __HUE_360,
+    }
+
+COLORS_PALETTE_COLS = len(PALETTE_HUE_NAMES)
 
 def __init_palette():
     pal = []
 
-    LEVELS = 8
+    SATURATIONS = 8
 
-    for clevel in range(LEVELS - 1):
-        clevel /= LEVELS
-        clevel += (1.0 / LEVELS)
-
-        for r, g, b in __PALETTE_COLORS:
-            rgba = Gdk.RGBA(r * clevel, g * clevel, b * clevel, 1.0)
+    for sat in range(SATURATIONS):
+        for hue in PALETTE_HUE_NAMES.values():
+            r, g, b = hls_to_rgb(hue, 0.5, 1.0 / (1 + sat))
+            rgba = Gdk.RGBA(r, g, b, 1.0)
             pal.append(rgba)
 
     return pal
 
 
-COLOR_BUTTON_PALETTE = __init_palette()
+COLORS_PALETTE = __init_palette()
 
 
 class ControlWidget():
@@ -76,8 +85,9 @@ class ControlWidget():
                       которого создаются виджеты;
         onChange    - callback - функция или метод, вызываемый при изменении
                       значения виджетом;
-                      принимает один параметр - список значений для
-                      каналов DMX512."""
+                      принимает два параметра:
+                      1й: ссылка на экземпляр ControlWidget;
+                      2й: список значений для каналов DMX512."""
 
     def __init__(self, control_, onChange_):
         """Конструктор должен быть перекрыт классом-потомком"""
@@ -103,31 +113,45 @@ class PanelWidget(ControlWidget):
     def __init__(self, control_, onChange_):
         super().__init__(control_, onChange_)
 
-        self.widget = Gtk.Frame.new(control_.name)
+        self.widget = Gtk.Frame.new()
+
+        if not self.control.hidename or self.control.icon:
+            lbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
+            lbox.set_border_width(WIDGET_SPACING)
+
+            if self.control.icon:
+                lbox.pack_start(Gtk.Image.new_from_pixbuf(self.control.icon), False, False, 0)
+
+            if not self.control.hidename:
+                lbox.pack_start(Gtk.Label.new(self.control.name), False, False, 0)
+
+            self.widget.set_label_widget(lbox)
+
         self.widget.set_label_align(0.5, 0.5)
         self.widget.set_tooltip_text(control_.getCommentStr())
 
-        #FIXME эту хрень переделать
-        cwgt = _children_widgets(control_)
-        cwgt.set_border_width(WIDGET_SPACING)
-
-        self.widget.add(cwgt)
+    def add_child(self, cw):
+        self.widget.add(cw)
 
 
 class LevelWidget(ControlWidget):
     def __init__(self, control_, onChange_):
-        super().__init__(control_, onChange)
+        super().__init__(control_, onChange_)
 
         self.widget = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
 
         tts = control_.getCommentStr()
 
-        slab = Gtk.Label.new(control_.name)
-        slab.set_tooltip_text(tts)
-        if len(control_.name) > 2:
-            slab.set_angle(270)
+        if not control_.hidename:
+            slab = Gtk.Label.new(control_.name)
+            slab.set_tooltip_text(tts)
+            if len(control_.name) > 2:
+                slab.set_angle(270)
 
-        self.widget.pack_start(slab, False, False, 0)
+            self.widget.pack_start(slab, False, False, 0)
+
+        if control_.icon:
+            self.widget.pack_start(Gtk.Image.new_from_pixbuf(control_.icon), False, False, 0)
 
         #!!!
         self.scale = Gtk.Scale.new(Gtk.Orientation.VERTICAL, None)
@@ -135,38 +159,49 @@ class LevelWidget(ControlWidget):
         self.scale.set_draw_value(False)
         self.scale.set_range(0, 255)
         self.scale.set_inverted(True)
+        self.scale.set_value(control_.value)
 
-        #self.scale.connect('value-changed', self.level_changed, self)
-        self.consoleWidgets.append(lw)
+        self.scale.connect('value-changed', self.level_changed)
 
-        self.widget.pack_start(scale, True, True, 0)
+        self.widget.pack_start(self.scale, True, True, 0)
+
+    def level_changed(self, scale):
+        self.onChange(self, [int(self.scale.get_value())])
 
     def setMinLevel(self):
-        self.widget.set_value(0)
+        self.scale.set_value(0)
 
     def setMaxLevel(self):
-        self.widget.set_value(255)
-
-    def getChannelValues(self):
-        return [int(self.widget.get_value())]
+        self.scale.set_value(255)
 
 
 class ColorLevelWidget(LevelWidget):
     def __init__(self, control_, onChange_):
         super().__init__(control_, onChange_)
 
-        """if iscl:
-            rgba = Gdk.RGBA()
-            rgba.parse(level.color)
+        rgba = Gdk.RGBA()
+        rgba.parse(control_.color)
 
-            clrbtn = Gtk.ColorButton.new_with_rgba(rgba)
-            #clrbtn.set_use_alpha(False)
-            clrbtn.add_palette(Gtk.Orientation.VERTICAL, 1, None)
-            clrbtn.add_palette(Gtk.Orientation.VERTICAL,
-                               COLOR_BUTTON_PALETTE_COLS,
-                               COLOR_BUTTON_PALETTE)
+        self.clrbtn = Gtk.ColorButton.new_with_rgba(rgba)
+        self.clrbtn.add_palette(Gtk.Orientation.VERTICAL, 1, None)
+        self.clrbtn.add_palette(Gtk.Orientation.VERTICAL,
+                           COLORS_PALETTE_COLS,
+                           COLORS_PALETTE)
+        self.clrbtn.connect('color-set', self.level_changed)
 
-            widget.pack_end(clrbtn, False, False, 0)"""
+        self.widget.pack_end(self.clrbtn, False, False, 0)
+
+    def level_changed(self, wgt):
+        level = self.scale.get_value()
+        # 0.0 - 255.0
+
+        rgba = self.clrbtn.get_rgba()
+        # 0.0 - 1.0
+
+        self.onChange(self, [int(rgba.red * level),
+                             int(rgba.green * level),
+                             int(rgba.blue * level)])
+
 
 
 CONTROL_WIDGETS = {Panel: PanelWidget,
@@ -189,8 +224,10 @@ class MainWnd():
 
         self.window, self.headerBar, self.boxControls = get_ui_widgets(uibldr, 'wndConsole', 'headerBar', 'boxControls')
 
-        iconsize = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 4
-        icon = resldr.load_pixbuf('images/dmxctrls.svg', iconsize, iconsize)
+        self.smallIconSizePx = Gtk.IconSize.lookup(Gtk.IconSize.MENU)[-1]
+
+        winIconSizePx = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 2
+        icon = resldr.load_pixbuf('images/dmxctrls.svg', winIconSizePx, winIconSizePx)
         self.window.set_icon(icon)
 
         self.window.set_title(TITLE_VERSION)
@@ -202,6 +239,18 @@ class MainWnd():
         self.channels = array('B', [0] * 512)
         self.dmxSendEnabled = True
         self.dmxTimer = True
+
+        #
+        #
+        #
+        self.dlgAbout = uibldr.get_object('dlgAbout')
+        self.dlgAbout.set_logo(icon)
+        self.dlgAbout.set_program_name(TITLE)
+        #self.dlgAbout.set_comments(SUB_TITLE)
+        self.dlgAbout.set_version('v%s' % VERSION)
+        self.dlgAbout.set_copyright(COPYRIGHT)
+        self.dlgAbout.set_website(URL)
+        self.dlgAbout.set_website_label(URL)
 
         #
         #
@@ -222,6 +271,8 @@ class MainWnd():
         #
         #
         #
+        self.icons = dict()
+        self.create_named_icons()
 
         print('Setting up console...', file=sys.stderr)
         if self.consoleFile:
@@ -231,6 +282,37 @@ class MainWnd():
         uibldr.connect_signals(self)
 
         GLib.timeout_add(1000 / 30, self.timer_func, None)
+
+    def create_named_icons(self):
+        for iname, ihue in PALETTE_HUE_NAMES.items():
+            r, g, b = hls_to_rgb(ihue, 0.5, 1.0)
+
+            csurf = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.smallIconSizePx, self.smallIconSizePx)
+
+            cc = cairo.Context(csurf)
+            #cc.scale(iconSize, iconSize)
+
+            center = self.smallIconSizePx / 2.0
+            radius = center * 0.7
+            circle = 2 * pi
+
+            cc.set_source(cairo.SolidPattern(0.0, 0.0, 0.0))
+
+            cc.arc(center, center, radius, 0.0, circle)
+            cc.fill()
+
+            radius1 = radius - 1.0
+
+            cc.set_source(cairo.SolidPattern(r, g, b))
+            cc.arc(center, center, radius1, 0.0, circle)
+            cc.fill()
+
+            self.icons[iname.lower()] = Gdk.pixbuf_get_from_surface(csurf, 0, 0, self.smallIconSizePx, self.smallIconSizePx)
+
+    def mnuMainAbout_activate(self, mnu):
+        self.dlgAbout.show_all()
+        self.dlgAbout.run()
+        self.dlgAbout.hide()
 
     def mnuFileOpen_activate(self, mnu):
         if self.consoleFile:
@@ -248,10 +330,13 @@ class MainWnd():
                 self.load_console()
 
     def show_exception(self, ex):
-        efmt = format_exception(*sys.exc_info())
+        etrace = '\n'.join(format_exception(*sys.exc_info()))
+        ex = str(ex)
 
-        self.labExMessage.set_text(str(ex))
-        self.labExInfo.set_text('\n'.join(efmt))
+        print('%s\n%s' % (ex, etrace), file=sys.stderr)
+
+        self.labExMessage.set_text(ex)
+        self.labExInfo.set_text(etrace)
 
         self.dlgException.show_all()
         self.dlgException.run()
@@ -274,30 +359,58 @@ class MainWnd():
 
         _clear_console()
 
+        def load_control_icon(ctrl):
+            """Загружает Gdk.Pixbuf из файла и масштабирует
+            до размера стандартной иконки и присваивает
+            экземпляр Gdk.Pixbuf атрибуту ctrl.icon."""
+
+            filename = ctrl.iconName
+            fromFile = True
+
+            if filename.startswith('@'):
+                # путь относительно загружаемого файла описания консоли
+                filename = os.path.join(os.path.split(self.consoleFile)[0], filename[1:])
+            elif filename.startswith('!'):
+                # встроенная иконка
+                fromFile = False
+                filename = filename[1:]
+            else:
+                filename = os.path.abspath(os.path.expanduser(filename))
+
+            #print('load_control_icon(): loading from "%s"' %  filename, file=sys.stderr)
+
+            ctrl.icon = self.icons[filename] if not fromFile else Pixbuf.new_from_file_at_size(filename,
+                                                                        self.smallIconSizePx,
+                                                                        self.smallIconSizePx)
+
         def _build_console_widgets(ctrl):
             """Рекурсивное создание Gtk.Widget соотв. типа.
             На входе: экземпляр Control.
             На выходе: Gtk.Widget."""
-
-            def _children_widgets(ctrl):
-                if len(ctrl.children) == 1:
-                    return _build_console_widgets(ctrl.children[0])
-                else:
-                    box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
-
-                    for child in ctrl.children:
-                        cwgt = _build_console_widgets(child)
-                        box.pack_start(cwgt, False, False, 0)
-
-                    return box
 
             ctltype = type(ctrl)
             cwgtclass = CONTROL_WIDGETS.get(ctltype, None)
             if cwgtclass is None:
                 raise Exception('Internal error: unimplemented support for control: %s' % ctltype.__name__)
 
+            if ctrl.iconName:
+                load_control_icon(ctrl)
+
             cwgt = cwgtclass(ctrl, self.onControlChanged)
             self.consoleWidgets.append(cwgt)
+
+            if isinstance(ctrl, Container):
+                if len(ctrl.children) == 1:
+                    cwgtchild = _build_console_widgets(ctrl.children[0])
+                else:
+                    cwgtchild = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
+
+                    for child in ctrl.children:
+                        subwgt = _build_console_widgets(child)
+                        cwgtchild.pack_start(subwgt, False, False, 0)
+
+                cwgtchild.set_border_width(WIDGET_SPACING)
+                cwgt.add_child(cwgtchild)
 
             return cwgt.widget
 
@@ -337,8 +450,9 @@ class MainWnd():
 
         self.headerBar.set_subtitle(st)
 
-    def onControlChanged(self, chanValues):
-        print(f'onControlChanged({chanValues=})', file=sys.stderr)
+    def onControlChanged(self, ctrlwgt, chanValues):
+        for ixch, cv in enumerate(chanValues, ctrlwgt.control.channel - 1):
+            self.channels[ixch] = cv
 
     def btnAllLevelsMin_clicked(self, btn):
         for wctl in self.consoleWidgets:
@@ -347,10 +461,6 @@ class MainWnd():
     def btnAllLevelsMax_clicked(self, btn):
         for wctl in self.consoleWidgets:
             wctl.setMaxLevel()
-
-    def level_changed(self, scale, lw):
-        for ixch, cv in enumerate(lw.getChannelValues(), lw.control.channel - 1):
-            self.channels[ixch] = cv
 
     def btnDebug_clicked(self, btn):
         ixch = 0
