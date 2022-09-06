@@ -206,6 +206,14 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="mnuFileRecent">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">_Recent files</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -259,6 +267,7 @@
   </object>
   <object class="GtkApplicationWindow" id="wndConsole">
     <property name="can-focus">False</property>
+    <property name="window-position">mouse</property>
     <signal name="destroy" handler="wnd_destroy" swapped="no"/>
     <child>
       <object class="GtkFlowBox" id="boxControls">

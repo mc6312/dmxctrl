@@ -19,6 +19,29 @@
 
 import xml.sax
 
+from gi import require_version as gi_require_version
+gi_require_version('Gdk', '3.0')
+from gi.repository.Gdk import RGBA
+
+import os.path
+
+
+# значения цветов для встроенной палитры и иконок
+__HUE_360 = 1.0 / 360
+PALETTE_HUE_NAMES = {
+    'red':          0   * __HUE_360,
+    'orange':       30  * __HUE_360,
+    'yellow':       60  * __HUE_360,
+    'yellowgreen':  90  * __HUE_360,
+    'green':        120 * __HUE_360,
+    'greenblue':    160 * __HUE_360,
+    'cyan':         180 * __HUE_360,
+    'deepblue':     210 * __HUE_360,
+    'blue':         240 * __HUE_360,
+    'purple':       260 * __HUE_360,
+    'magenta':      300 * __HUE_360,
+    }
+
 
 class Control():
     # следующие параметры класса ДОЛЖНЫ быть перекрыты классом-потомком
@@ -116,7 +139,8 @@ class NamedControl(Control):
                   если не указано - при загрузке файла .dmxctrl
                   присваивается имя по умолчанию - "ИмяТипа #N",
                   где "N" - порядковый номер контрола;
-    icon        - строка, имя графического файла с иконкой;
+    icon        - строка, имя графического файла с иконкой или
+                  встроенной иконки;
                   если не указано - в UI иконки не будет;
     hidename    - булевское значение;
                   если True - UI не должен отображать имя;
@@ -131,9 +155,32 @@ class NamedControl(Control):
         self.name = ''
         self.hidename = False
         self.icon = None
-        # внутренний параметр - путь к файлу иконки,
-        # она будет загружаться при построении UI
-        self.iconName = None
+        # внутренний атрибут, True, если в self.icon имя встроенной иконки
+        self.isInternalIcon = False
+
+    def __setup_icon_path(self, fname):
+        """Проверка правильности пути/имени иконки.
+        Ругань в случае ошибок, установка атрибутов в случае отсутствия
+        ошибок."""
+
+        self.isInternalIcon = False
+
+        if fname.startswith('@'):
+            # путь относительно загружаемого файла описания консоли
+            self.icon = os.path.join(os.path.split(self.parent.filename)[0], fname[1:])
+        elif fname.startswith('!'):
+            # встроенная иконка
+            self.icon = fname[1:]
+            if not self.icon in PALETTE_HUE_NAMES:
+                raise Exception('invalid internal icon name in "icon" attribute')
+
+            self.isInternalIcon = True
+        else:
+            # "обычный" полный или относительный путь в файловой системе
+            self.icon = os.path.abspath(os.path.expanduser(fname))
+
+        if not self.isInternalIcon and not os.path.exists(self.icon):
+            raise Exception('invalid "icon" attribute - file "%s" is missing' % self.icon)
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -141,8 +188,9 @@ class NamedControl(Control):
         if ns == 'name':
             self.name = vs
         elif ns == 'icon':
+            # правильность пути проверяется
             # сама иконка загружается при построении UI
-            self.iconName = vs
+            self.__setup_icon_path(vs)
         elif ns == 'hidename':
             self.hidename = self.strArgToBool(vs)
 
@@ -211,8 +259,9 @@ class ColorLevel(Level):
 
         if ns == 'color':
             #TODO возможно, стоит сделать более строгую проверку значения
-            if not vs.startswith('#') or len(vs) != 7:
-                raise ValueError('invalid color value')
+            if vs.startswith('#'):
+                if len(vs) not in (4, 7):
+                    raise ValueError('invalid color RGB value format')
 
             self.color = vs
 
@@ -299,7 +348,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
 
                 raise self.Error(self, '"%s" must be child of %s' % (name, psa))
 
-        def checkSetParameters():
+        def checkSetAttributes():
             try:
                 extra = set(attributes.keys()) - set(self.stackTop.obj.PARAMETERS | self.stackTop.obj.OPTIONS)
                 if extra:
@@ -337,7 +386,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
                     self.curChannel += self.stackTop.obj.CHANNELS
 
             except Exception as ex:
-                raise self.Error(self, str(ex))
+                raise self.Error(self, str(ex)) from ex
 
         if stackLen == 1:
             # вот таким тупым способом проверяем формат файла
@@ -345,7 +394,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
                 raise self.Error(self, 'invalid root tag - file is not a DMXControls file')
 
             self.stackTop.obj = self
-            checkSetParameters()
+            checkSetAttributes()
         else:
             # служебные тэги
             if name == 'br':
@@ -359,11 +408,12 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
                         checkParent(cclass.PARENTS)
 
                         self.stackTop.obj = cclass()
-                        checkSetParameters()
+
+                        checkSetAttributes()
 
                         oparent = self.getParent()
-                        oparent.obj.children.append(self.stackTop.obj)
                         self.stackTop.obj.parent = oparent.obj
+                        oparent.obj.children.append(self.stackTop.obj)
 
                         isValidClass = True
                         break

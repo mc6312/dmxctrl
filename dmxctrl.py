@@ -20,7 +20,7 @@
 
 
 TITLE = 'DMXCtrl'
-VERSION = '0.4'
+VERSION = '0.5'
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -39,31 +39,19 @@ from array import array
 from ola.ClientWrapper import ClientWrapper
 
 from dmxctrldata import *
-
+from dmxctrlcfg import *
 
 from colorsys import hls_to_rgb
 
-
-# значения цветов для функции hls_to_rgb()
-__HUE_360 = 1.0 / 360
-PALETTE_HUE_NAMES = {
-    'RED':      0.0,
-    'GREEN':    120 * __HUE_360,
-    'BLUE':     240 * __HUE_360,
-    'ORANGE':   30 * __HUE_360,
-    'YELLOW':   60 * __HUE_360,
-    'CYAN':     180 * __HUE_360,
-    'MAGENTA':  300 * __HUE_360,
-    }
 
 COLORS_PALETTE_COLS = len(PALETTE_HUE_NAMES)
 
 def __init_palette():
     pal = []
 
-    SATURATIONS = 8
+    __PALETTE_SATURATIONS = 9
 
-    for sat in range(SATURATIONS):
+    for sat in range(__PALETTE_SATURATIONS):
         for hue in PALETTE_HUE_NAMES.values():
             r, g, b = hls_to_rgb(hue, 0.5, 1.0 / (1 + sat))
             rgba = Gdk.RGBA(r, g, b, 1.0)
@@ -83,18 +71,14 @@ class ControlWidget():
                       для добавления в UI, может содержать другие виджеты;
         control     - экземпляр потомка dmxctrldata.Control, на основе
                       которого создаются виджеты;
-        onChange    - callback - функция или метод, вызываемый при изменении
-                      значения виджетом;
-                      принимает два параметра:
-                      1й: ссылка на экземпляр ControlWidget;
-                      2й: список значений для каналов DMX512."""
+        owner       - экземпляр Gtk.Window - окна консоли."""
 
-    def __init__(self, control_, onChange_):
+    def __init__(self, control_, owner_):
         """Конструктор должен быть перекрыт классом-потомком"""
 
         self.widget = None
         self.control = control_
-        self.onChange = onChange_
+        self.owner = owner_
 
     def setMinLevel(self):
         """Установка максимального значения"""
@@ -110,8 +94,8 @@ class ControlWidget():
 
 
 class PanelWidget(ControlWidget):
-    def __init__(self, control_, onChange_):
-        super().__init__(control_, onChange_)
+    def __init__(self, control_, owner_):
+        super().__init__(control_, owner_)
 
         self.widget = Gtk.Frame.new()
 
@@ -135,8 +119,8 @@ class PanelWidget(ControlWidget):
 
 
 class LevelWidget(ControlWidget):
-    def __init__(self, control_, onChange_):
-        super().__init__(control_, onChange_)
+    def __init__(self, control_, owner_):
+        super().__init__(control_, owner_)
 
         self.widget = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
 
@@ -176,8 +160,8 @@ class LevelWidget(ControlWidget):
 
 
 class ColorLevelWidget(LevelWidget):
-    def __init__(self, control_, onChange_):
-        super().__init__(control_, onChange_)
+    def __init__(self, control_, owner_):
+        super().__init__(control_, owner_)
 
         rgba = Gdk.RGBA()
         rgba.parse(control_.color)
@@ -215,7 +199,9 @@ class MainWnd():
         self.dmxTimer = False
         Gtk.main_quit()
 
-    def __init__(self):
+    def __init__(self, cfg):
+        self.cfg = cfg
+
         resldr = get_resource_loader()
         uibldr = resldr.load_gtk_builder('dmxctrl.ui')
 
@@ -239,6 +225,12 @@ class MainWnd():
         self.channels = array('B', [0] * 512)
         self.dmxSendEnabled = True
         self.dmxTimer = True
+
+        #
+        #
+        #
+        self.mnuFileRecent = uibldr.get_object('mnuFileRecent')
+        self.update_recent_files_menu()
 
         #
         #
@@ -283,10 +275,51 @@ class MainWnd():
 
         GLib.timeout_add(1000 / 30, self.timer_func, None)
 
+    def update_recent_files_menu(self):
+        if not self.cfg.recentFiles:
+            self.mnuFileRecent.set_submenu()
+        else:
+            mnu = Gtk.Menu.new()
+            mnu.set_reserve_toggle_size(False)
+
+            for ix, rfn in enumerate(self.cfg.recentFiles):
+                # сокращаем отображаемое имя файла, длину пока приколотим гвоздями
+                #TODO когда-нибудь сделать сокращение отображаемого в меню имени файла по человечески
+                lrfn = len(rfn)
+                if lrfn > 40:
+                    disprfn = '%s...%s' % (rfn[:3], rfn[lrfn - 34:])
+                else:
+                    disprfn = rfn
+
+                mi = Gtk.MenuItem.new_with_label(disprfn)
+                mi.connect('activate', self.file_open_recent, ix)
+                mnu.append(mi)
+
+            mnu.show_all()
+
+            self.mnuFileRecent.set_submenu(mnu)
+
+    def file_open_recent(self, wgt, ix):
+        fname = self.cfg.recentFiles[ix]
+
+        # проверяем наличие файла обязательно, т.к. в списке недавних
+        # могут быть уже удалённые файлы или лежащие на внешних
+        # неподключённых носителях
+        # при этом метод file_open_filename() проверку производить
+        # не должен, т.к. в первую очередь расчитан на вызов после
+        # диалога выбора файла, который несуществующего файла не вернёт.
+        # кроме того, сообщение об недоступном файле _здесь_ должно
+        # отличаться от просто "нету файла"
+
+        if not os.path.exists(fname):
+            msg_dialog(self.window, TITLE,
+                'File "%s" is missing' % fname)
+        else:
+            self.consoleFile = fname
+            self.load_console()
+
     def create_named_icons(self):
         for iname, ihue in PALETTE_HUE_NAMES.items():
-            r, g, b = hls_to_rgb(ihue, 0.5, 1.0)
-
             csurf = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.smallIconSizePx, self.smallIconSizePx)
 
             cc = cairo.Context(csurf)
@@ -303,7 +336,7 @@ class MainWnd():
 
             radius1 = radius - 1.0
 
-            cc.set_source(cairo.SolidPattern(r, g, b))
+            cc.set_source(cairo.SolidPattern(*hls_to_rgb(ihue, 0.5, 1.0)))
             cc.arc(center, center, radius1, 0.0, circle)
             cc.fill()
 
@@ -327,7 +360,9 @@ class MainWnd():
 
             if fn:
                 self.consoleFile = fn
-                self.load_console()
+                if self.load_console():
+                    self.cfg.add_recent_file(fn)
+                    self.update_recent_files_menu()
 
     def show_exception(self, ex):
         etrace = '\n'.join(format_exception(*sys.exc_info()))
@@ -346,7 +381,26 @@ class MainWnd():
         if len(sys.argv) >= 2:
             self.consoleFile = os.path.abspath(sys.argv[1])
 
+    def load_icon_image(self, ctrl):
+        """Загрузка иконки (встроенной или из файла) с именем ctrl.icon.
+        Возвращает экземпляр Gtk.Image."""
+
+        # на этом этапе ctrl.icon содержит правильный путь
+        # или проверенное имя встроенной иконки
+        if ctrl.isInternalIcon:
+            pbuf = self.icons[ctrl.icon]
+        else:
+            pbuf = Pixbuf.new_from_file_at_size(ctrl.icon,
+                                                self.smallIconSizePx,
+                                                self.smallIconSizePx)
+
+        return Gtk.Image.new_from_pixbuf(pbuf)
+
     def load_console(self):
+        """Загрузка файла описания консоли.
+        Путь к файлу должен быть в self.consoleFile.
+        Метод возвращает булевское значение - True в случае успешной загрузки."""
+
         def _clear_console():
             self.console = None
             self.consoleWidgets.clear()
@@ -358,30 +412,6 @@ class MainWnd():
                 wg.destroy()
 
         _clear_console()
-
-        def load_control_icon(ctrl):
-            """Загружает Gdk.Pixbuf из файла и масштабирует
-            до размера стандартной иконки и присваивает
-            экземпляр Gdk.Pixbuf атрибуту ctrl.icon."""
-
-            filename = ctrl.iconName
-            fromFile = True
-
-            if filename.startswith('@'):
-                # путь относительно загружаемого файла описания консоли
-                filename = os.path.join(os.path.split(self.consoleFile)[0], filename[1:])
-            elif filename.startswith('!'):
-                # встроенная иконка
-                fromFile = False
-                filename = filename[1:]
-            else:
-                filename = os.path.abspath(os.path.expanduser(filename))
-
-            #print('load_control_icon(): loading from "%s"' %  filename, file=sys.stderr)
-
-            ctrl.icon = self.icons[filename] if not fromFile else Pixbuf.new_from_file_at_size(filename,
-                                                                        self.smallIconSizePx,
-                                                                        self.smallIconSizePx)
 
         def _build_console_widgets(ctrl):
             """Рекурсивное создание Gtk.Widget соотв. типа.
@@ -447,8 +477,14 @@ class MainWnd():
 
         if self.console and self.console.name:
             st = self.console.name
+            ret = True
+        else:
+            ret = False
 
         self.headerBar.set_subtitle(st)
+
+        print('Console is %sloaded' % ('' if ret else 'not '), file=sys.stderr)
+        return ret
 
     def onControlChanged(self, ctrlwgt, chanValues):
         for ixch, cv in enumerate(chanValues, ctrlwgt.control.channel - 1):
@@ -486,7 +522,15 @@ class MainWnd():
 
 
 def main():
-    MainWnd().main()
+    cfg = Config()
+    print('Loading settings...', file=sys.stderr)
+    cfg.load()
+
+    try:
+        MainWnd(cfg).main()
+    finally:
+        print('Saving settings...', file=sys.stderr)
+        cfg.save()
 
     return 0
 
