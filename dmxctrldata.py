@@ -44,31 +44,56 @@ PALETTE_HUE_NAMES = {
 
 
 class Control():
-    # следующие параметры класса ДОЛЖНЫ быть перекрыты классом-потомком
-    TAG = None          # строка, имя тэга в XML-описании
-    PARENTS = set()     # множество строк - имена допустимых родительских тэгов
-    PARAMETERS = set()  # множество строк - имена обязательных параметров
-    OPTIONS = {'channel'}  # множество строк - имена необязательных параметров
-    CHANNELS = 0        # количество каналов, занимаемых контролом;
-                        # 0 для контейнеров (и прочих, не изменяющих
-                        # значения в каналах), >0 для изменяющих значения
+    """Базовый класс "контрола" - управляющего элемента.
+    Этот класс напрямую не используется, используются его потомки.
+
+    Атрибуты класса:
+        TAG                     - строка, имя тэга в XML-описании;
+        PARENTS = set()         - множество строк - имена допустимых
+                                  родительских тэгов;
+        PARAMETERS = set()      - множество строк - имена обязательных
+                                  параметров;
+        OPTIONS = {'channel'}   - множество строк - имена необязательных
+                                  параметров;
+        CHANNELS = 0            - количество каналов, занимаемых контролом;
+                                  0 для контейнеров (и прочих, не изменяющих
+                                  значения в каналах),
+                                  >0 для изменяющих значения.
+        Атрибуты, содержащие множества, должны дополняться или
+        перекрываться в классе-потомке, прочие - должны перекрываться.
+
+    Атрибуты экземпляра класса:
+        console     - внутренний атрибут, ссылка на экземпляр DMXControls,
+                      который содержит все Control'ы (и позволяет им
+                      дёргать себя за всякие полезные методы);
+        comments    - список строк, текстовое описание контрола
+                      для отображения в UI (напр. в виде всплывающей
+                      подсказки);
+        channel     - целое, номер первого используемого канала;
+                      для обычного Control и потомков по умолчанию
+                      устанавливается в None (которое соответствует
+                      значению "auto" в файле);
+                      значение может быть:
+                      1. явно указано в файле соответствующим атрибутом;
+                      2. задано на основе счётчика (в т.ч. инициализированного
+                         значением родительского Control'а);
+                      окончательное присваивание значений производится
+                      в методе DMXControls.endElement() (аналогично атрибутам
+                      NamedControl.name), т.е. после завершения загрузки
+                      все важные атрибуты будут так или иначе заданы."""
+
+    TAG = None
+    PARENTS = set()
+    PARAMETERS = set()
+    OPTIONS = {'channel'}
+    CHANNELS = 0
 
     def __init__(self):
         # конструкторы задают значения атрибутов по умолчанию,
         # реальные значения устанавливает загрузчик методом Control.setParameter()
-        self.parent = None
+        self.console = None
         self.comments = []
-        # channel для обычного Control и потомков устанавливается в None
-        # (которое соответствует значению "auto" в файле)
-        # значение может быть:
-        # 1. явно указано в файле соответствующим атрибутом;
-        # 2. задано на основе счётчика (в т.ч. инициализированного
-        #    значением родительского Control'а)
-        # окончательное присваивание значений производится в методе
-        # DMXControlsLoader.endElement() (аналогично атрибутам NamedControl.name)
-        # т.е. после завершения загрузки все важные атрибуты будут
-        # так или иначе заданы
-        self.channel = None # !
+        self.channel = None
 
     def strArgToInt(self, s, strict=True):
         """Преобразование строкового значения атрибута в целое.
@@ -110,7 +135,7 @@ class Control():
         vs  - строка, значение атрибута.
 
         В случае неизвестного значения name метод не должен делать ничего -
-        проверка имён производится в методе DMXControlsLoader.startElement().
+        проверка имён производится в методе DMXControls.startElement().
         В случае прочих ошибок должны генерироваться исключения.
         Метод может быть перекрыт классом-потомком."""
 
@@ -124,7 +149,7 @@ class Control():
 
     def checkParameters(self):
         """Проверка наличия и правильности всех параметров.
-        Вызывается методом DMXControlsLoader.endElement().
+        Вызывается методом DMXControls.endElement().
         В случае ошибок метод должен вызывать исключения.
         Перекрывается при необходимости классом-потомком."""
 
@@ -134,18 +159,21 @@ class Control():
 class NamedControl(Control):
     """Контрол с отображаемым именем.
 
-    Необязательные атрибуты (в дополнение к наследственным):
-    name        - строка, имя для отображения в UI;
-                  если не указано - при загрузке файла .dmxctrl
-                  присваивается имя по умолчанию - "ИмяТипа #N",
-                  где "N" - порядковый номер контрола;
-    icon        - строка, имя графического файла с иконкой или
-                  встроенной иконки;
-                  если не указано - в UI иконки не будет;
-    hidename    - булевское значение;
-                  если True - UI не должен отображать имя;
-                  на отображение иконки этот параметр не влияет;
-                  по умолчанию - False."""
+    Необязательные атрибуты экземпляра класса (в дополнение
+    к наследственным):
+        name        - строка, имя для отображения в UI;
+                      если не указано - при загрузке файла .dmxctrl
+                      присваивается имя по умолчанию - "ИмяТипа #N",
+                      где "N" - порядковый номер контрола;
+        icon        - строка, имя графического файла с иконкой или
+                      встроенной иконки;
+                      если не указано - в UI иконки не будет;
+        isInternalIcon - внутренний атрибут, True, если в self.icon
+                      имя встроенной иконки;
+        hidename    - булевское значение;
+                      если True - UI не должен отображать имя;
+                      на отображение иконки этот параметр не влияет;
+                      по умолчанию - False."""
 
     OPTIONS = Control.OPTIONS | {'name', 'icon', 'hidename'}
 
@@ -155,7 +183,6 @@ class NamedControl(Control):
         self.name = ''
         self.hidename = False
         self.icon = None
-        # внутренний атрибут, True, если в self.icon имя встроенной иконки
         self.isInternalIcon = False
 
     def __setup_icon_path(self, fname):
@@ -167,7 +194,7 @@ class NamedControl(Control):
 
         if fname.startswith('@'):
             # путь относительно загружаемого файла описания консоли
-            self.icon = os.path.join(os.path.split(self.parent.filename)[0], fname[1:])
+            self.icon = os.path.join(os.path.split(self.console.filename)[0], fname[1:])
         elif fname.startswith('!'):
             # встроенная иконка
             self.icon = fname[1:]
@@ -199,7 +226,10 @@ class Container(NamedControl):
     """Контрол-контейнер. Может содержать другие контролы,
     не может менять значение в каналах.
     Атрибут "channel" только хранит значение для инициализации
-    соотв. атрибутов во вложенных контролах."""
+    соотв. атрибутов во вложенных контролах.
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        children    - список вложенных экземпляров Control."""
 
     OPTIONS = NamedControl.OPTIONS
 
@@ -225,15 +255,28 @@ class Regulator(NamedControl):
 
 
 class Level(Regulator):
+    """Движок-регулятор уровня.
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        value   - целое, начальное положение движка (0..255);
+                  по умолчанию - 0;
+        steps   - целое, количество шагов движка (0..32);
+                  значение 0 указывает плавное изменение положения
+                  движка, без шагов;
+                  при steps=1 движок фактически работает как переключатель
+                  между значениями 0 и 255;
+                  по умолчанию - 0."""
+
     TAG = 'level'
     PARENTS = {'dmxcontrols', 'panel'}
-    OPTIONS = Regulator.OPTIONS | {'value'}
+    OPTIONS = Regulator.OPTIONS | {'value', 'steps'}
     CHANNELS = 1
 
     def __init__(self):
         super().__init__()
 
         self.value = 0
+        self.steps = 0
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -242,6 +285,10 @@ class Level(Regulator):
             self.value = self.strArgToInt(vs)
             if self.value < 0 or self.value > 255:
                 raise ValueError('value out of range')
+        elif ns == 'steps':
+            self.steps = self.strArgToInt(vs)
+            if self.steps < 0 or self.steps > 32:
+                raise ValueError('steps out of range')
 
 
 class ColorLevel(Level):
@@ -266,7 +313,7 @@ class ColorLevel(Level):
             self.color = vs
 
 
-class DMXControlsLoader(Container, xml.sax.ContentHandler):
+class DMXControls(Container, xml.sax.ContentHandler):
     TAG = 'dmxcontrols'
     OPTIONS = Container.OPTIONS | {'universe'}
 
@@ -296,7 +343,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
         self.stackTop = None
         self.curChannel = 1
 
-        self.namedCounts = {DMXControlsLoader:0, Panel:0, Level:0}
+        self.namedCounts = {DMXControls:0, Panel:0, Level:0}
 
         parser = xml.sax.make_parser()
         parser.setContentHandler(self)
@@ -408,11 +455,11 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
                         checkParent(cclass.PARENTS)
 
                         self.stackTop.obj = cclass()
+                        self.stackTop.obj.console = self
 
                         checkSetAttributes()
 
                         oparent = self.getParent()
-                        self.stackTop.obj.parent = oparent.obj
                         oparent.obj.children.append(self.stackTop.obj)
 
                         isValidClass = True
@@ -449,7 +496,7 @@ class DMXControlsLoader(Container, xml.sax.ContentHandler):
 if __name__ == '__main__':
     print('[debugging %s]' % __file__)
 
-    dmxc = DMXControlsLoader('example.dmxctrl')
+    dmxc = DMXControls('example.dmxctrl')
     #print(help(dmxc))
 
     def _dump_dict(d):

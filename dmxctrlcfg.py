@@ -29,10 +29,14 @@ class Config():
     CFGFN = 'settings.json'
     CFGAPP = 'dmxctrl'
 
+    CONSOLE_SCROLLABILITY = 'console_scrollability'
+
     RECENTFILES = 'recentfiles'
     MAX_RECENT_FILES = 24
 
     def __init__(self):
+        self.consoleScrollability = False
+
         # ранее открывавшиеся файлы (список строк)
         self.recentFiles = []
 
@@ -53,6 +57,10 @@ class Config():
         if os.path.exists(self.configPath):
             with open(self.configPath, 'r', encoding=JSON_ENCODING) as f:
                 d = json.load(f)
+                #
+                # общие настройки
+                #
+                self.consoleScrollability = d.get(self.CONSOLE_SCROLLABILITY, self.consoleScrollability)
 
                 #
                 # список открывавшихся файлов
@@ -87,7 +95,7 @@ class Config():
             del self.recentFiles[0]
 
     def save(self):
-        tmpd = {}
+        tmpd = {self.CONSOLE_SCROLLABILITY:self.consoleScrollability}
 
         if self.recentFiles:
             tmpd[self.RECENTFILES] = self.recentFiles

@@ -42,12 +42,19 @@
         <level name="R" icon="!red" hidename="1"/>
             <!-- Движок, управляющий значением в одном канале DMX512.
             Необязательные параметры (кроме общих для всех элементов):
-            value       - целое, начальное значение для движка. -->
+            value   - целое, начальное значение для движка (0..255);
+                      по умолчанию - 0;
+            steps   - целое, количество шагов движка (0..32);
+                      значение 0 указывает плавное изменение положения
+                      движка, без шагов;
+                      при steps=1 движок фактически работает как переключатель
+                      между значениями 0 и 255;
+                      значение по умолчанию - 0. -->
         <level name="G" icon="!green" hidename="yes"/>
         <level name="B" icon="!blue" hidename="True"/>
     </panel>
     <panel name="Other panel">
-        <level>Движок чего-то</level>
+        <level steps="1">Движок чего-то</level>
         <panel name="Sub panel">
             <level name="R" channel="100"/>
                 <!-- Элементы, следующие за этим, будут использовать
@@ -56,7 +63,7 @@
             <level name="B"/>
         </panel>
     </panel>
-    <level name="Something" value="128">
+    <level name="Something" value="128" steps="8">
     </level>
     <panel>
         <colorlevel name="CL" color="#FF8000">
