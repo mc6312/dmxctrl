@@ -75,7 +75,7 @@ class Config():
                     if not isinstance(rfn, str):
                         raise TypeError(E_SETTINGS % ('недопустимый тип элемента #%d списка "%s"' % (ix, self.RECENTFILES)))
 
-                    rfn = rfn.strip()
+                    rfn = os.path.abspath(os.path.expanduser(rfn.strip()))
                     if not rfn:
                         continue
 
