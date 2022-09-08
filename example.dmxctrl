@@ -36,8 +36,12 @@
     Пример описания консоли<br/>ажно из двух строк
     <panel name="Test panel" icon="@images/dmxctrls.svg">
         <!-- Панель. Может содержать другие элементы.
-        Значение атрибута channel (если он есть) указывает номер первого
-        канала для вложенных элементов. -->
+        Необязательные атрибуты:
+            channel     - если задан - указывает номер первого канала
+                          для вложенных элементов;
+            vertical    - булевское значение; если True - вложенные
+                          элементы будут расположены вертикально;
+                          по умолчанию - False (горизонтальное расположение). -->
         Панель с тремя движками
         <level name="R" icon="!red" hidename="1"/>
             <!-- Движок, управляющий значением в одном канале DMX512.
@@ -53,20 +57,20 @@
         <level name="G" icon="!green" hidename="yes"/>
         <level name="B" icon="!blue" hidename="True"/>
     </panel>
-    <panel name="Other panel">
-        <level steps="1">Движок чего-то</level>
-        <panel name="Sub panel">
-            <level name="R" channel="100"/>
+    <panel name="Other panel" vertical="True">
+        <level steps="1" vertical="False">Движок чего-то</level>
+        <panel name="Sub panel" vertical="True">
+            <level name="R" channel="100" vertical="False"/>
                 <!-- Элементы, следующие за этим, будут использовать
                 каналы 101 и далее! -->
-            <level name="G"/>
-            <level name="B"/>
+            <level name="G" vertical="False"/>
+            <level name="B" vertical="False"/>
         </panel>
     </panel>
     <level name="Something" value="128" steps="8">
     </level>
     <panel>
-        <colorlevel name="CL" color="#FF8000">
+        <colorlevel name="CL1" color="#FF8000">
             <!-- Расширенный вариант элемента level - движок с кнопкой
             выбора цвета. Движок управляет яркостью выбранного цвета,
             генерируя значения для трёх каналов.
@@ -80,5 +84,6 @@
                                 blue, purple, magenta. -->
             Движок с выбором цвета из палитры
         </colorlevel>
+        <colorlevel name="CL2" color="#0080FF" steps="1" />
     </panel>
 </dmxcontrols>

@@ -240,10 +240,28 @@ class Container(NamedControl):
 
 
 class Panel(Container):
+    """Панель, содержащая другие элементы.
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        vertical    - булевское значение; если равно True -
+                      вложенные элементы располагаются по вертикали;
+                      значение по умолчанию - False (горизонтальное
+                      расположение элементов)."""
+
     TAG = 'panel'
     PARENTS = {'dmxcontrols', 'panel'}
+    OPTIONS = Container.OPTIONS | {'vertical'}
 
-    pass
+    def __init__(self):
+        super().__init__()
+
+        self.vertical = False
+
+    def setParameter(self, ns, vs):
+        super().setParameter(ns, vs)
+
+        if ns == 'vertical':
+            self.vertical = self.strArgToBool(vs)
 
 
 class Regulator(NamedControl):
@@ -258,18 +276,21 @@ class Level(Regulator):
     """Движок-регулятор уровня.
 
     Атрибуты экземпляра класса (в дополнение к унаследованным):
-        value   - целое, начальное положение движка (0..255);
-                  по умолчанию - 0;
-        steps   - целое, количество шагов движка (0..32);
-                  значение 0 указывает плавное изменение положения
-                  движка, без шагов;
-                  при steps=1 движок фактически работает как переключатель
-                  между значениями 0 и 255;
-                  по умолчанию - 0."""
+        value       - целое, начальное положение движка (0..255);
+                      по умолчанию - 0;
+        steps       - целое, количество шагов движка (0..32);
+                      значение 0 указывает плавное изменение положения
+                      движка, без шагов;
+                      при steps=1 движок фактически работает как переключатель
+                      между значениями 0 и 255;
+                      по умолчанию - 0;
+        vertical    - булевское значение; если равно True -
+                      движок вертикальный;
+                      значение по умолчанию - True."""
 
     TAG = 'level'
     PARENTS = {'dmxcontrols', 'panel'}
-    OPTIONS = Regulator.OPTIONS | {'value', 'steps'}
+    OPTIONS = Regulator.OPTIONS | {'value', 'steps', 'vertical'}
     CHANNELS = 1
 
     def __init__(self):
@@ -277,6 +298,7 @@ class Level(Regulator):
 
         self.value = 0
         self.steps = 0
+        self.vertical = True
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -289,6 +311,8 @@ class Level(Regulator):
             self.steps = self.strArgToInt(vs)
             if self.steps < 0 or self.steps > 32:
                 raise ValueError('steps out of range')
+        elif ns == 'vertical':
+            self.vertical = self.strArgToBool(vs)
 
 
 class ColorLevel(Level):
@@ -514,7 +538,7 @@ if __name__ == '__main__':
                 ctl.__class__.__name__,
                 ctl.name,
                 '' if not ctl.icon else ' (%s)' % ctl.icon,
-                '' if not isinstance(ctl, Regulator) else _dump_dict(ctl.__dict__)))
+                _dump_dict(ctl.__dict__)))
 
         indent += ' '
 

@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.5%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.6%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -136,20 +136,34 @@ class PanelWidget(ControlWidget):
         self.widget.set_label_align(0.5, 0.5)
         self.widget.set_tooltip_text(self.control.getCommentStr())
 
+        self.box = Gtk.Box.new(Gtk.Orientation.VERTICAL if self.control.vertical else Gtk.Orientation.HORIZONTAL,
+                           WIDGET_SPACING)
+        self.box.set_border_width(WIDGET_SPACING)
+        self.widget.add(self.box)
+
     def add_child(self, cw):
-        self.widget.add(cw)
+        self.box.pack_start(cw, False, False, 0)
 
 
 class LevelWidget(ControlWidget):
     def setup(self):
-        self.widget = Gtk.Box.new(Gtk.Orientation.VERTICAL, WIDGET_SPACING)
+        if self.control.vertical:
+            scmincx = -1
+            scmincy = WIDGET_BASE_HEIGHT * 3
+            _ornt = Gtk.Orientation.VERTICAL
+        else:
+            scmincx = WIDGET_BASE_WIDTH * 6
+            scmincy = -1
+            _ornt = Gtk.Orientation.HORIZONTAL
+
+        self.widget = Gtk.Box.new(_ornt, WIDGET_SPACING)
 
         tts = self.control.getCommentStr()
 
         if not self.control.hidename:
             slab = Gtk.Label.new(self.control.name)
             slab.set_tooltip_text(tts)
-            if len(self.control.name) > 2:
+            if self.control.vertical and (len(self.control.name) > 2):
                 slab.set_angle(270)
 
             self.widget.pack_start(slab, False, False, 0)
@@ -169,10 +183,11 @@ class LevelWidget(ControlWidget):
             16.0 if self.control.steps == 0 else sstep,
             0.0)
 
-        self.scale = Gtk.Scale.new(Gtk.Orientation.VERTICAL, None)
+        self.scale = Gtk.Scale.new(_ornt, None)
+        self.scale.set_size_request(scmincx, scmincy)
         self.scale.set_tooltip_text(tts)
         self.scale.set_draw_value(False)
-        self.scale.set_inverted(True)
+        self.scale.set_inverted(self.control.vertical)
 
         if self.control.steps > 0:
             spos = 0.0
@@ -251,28 +266,25 @@ class MainWnd():
         print('DMX client wrapper initialization...', file=sys.stderr)
         self.wrapper = ClientWrapper()
 
-        self.window, self.headerBar,\
-        imgTbtnConsoleScrollable, self.tbtnConsoleScrollable,\
-        self.mnuMainConsoleScrollable = get_ui_widgets(uibldr,
+        self.window, self.headerBar, imgTbtnConsoleScrollable,\
+        self.tbtnConsoleScrollable, self.labConsoleName,\
+        self.stackPages, self.boxConsole, self.boxRecents,\
+        self.swndControls, self.boxControls = get_ui_widgets(uibldr,
             'wndConsole', 'headerBar', 'imgTbtnConsoleScrollable',
-            'tbtnConsoleScrollable', 'mnuMainConsoleScrollable')
+            'tbtnConsoleScrollable', 'labConsoleName',
+            'stackPages', 'boxConsole', 'boxRecents',
+            'swndControls', 'boxControls')
 
         imgTbtnConsoleScrollable.set_from_pixbuf(resldr.load_pixbuf_icon_size('images/consolescrollable.svg', iconSize))
         #
-        self.swnd = Gtk.ScrolledWindow()
-        self.swnd.set_border_width(WIDGET_SPACING)
+        self.swndControls.set_border_width(WIDGET_SPACING)
 
         self.setup_console_scrollability(self.cfg.consoleScrollability)
 
-        self.swnd.set_overlay_scrolling(False)
-        #self.swnd.set_min_content_width(WIDGET_BASE_WIDTH * 40)
-        self.swnd.set_propagate_natural_width(True)
+        #self.swnd.set_overlay_scrolling(False)
+        #self.swnd.set_propagate_natural_width(True)
 
-        self.window.add(self.swnd)
         self.window.set_size_request(-1, WIDGET_BASE_HEIGHT * 20)
-
-        self.boxControls = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
-        self.swnd.add(self.boxControls)
 
         if DEBUG:
             imgDebug = Gtk.Image.new_from_icon_name('dialog-warning', iconSize)
@@ -282,7 +294,6 @@ class MainWnd():
         self.smallIconSizePx = Gtk.IconSize.lookup(iconSize)[-1]
 
         winIconSizePx = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 2
-        #print(f'{winIconSizePx=}, {Gtk.IconSize.lookup(iconSize)[0]=}')
         icon = resldr.load_pixbuf('images/dmxctrls.svg', winIconSizePx, winIconSizePx)
         self.window.set_icon(icon)
 
@@ -298,16 +309,18 @@ class MainWnd():
         self.dmxTimer = True
 
         #
+        # список ранее использованных файлов
         #
-        #
-        self.mnuFileRecent = uibldr.get_object('mnuFileRecent')
-        self.update_recent_files_menu()
+        self.tvRecentFiles = TreeViewShell.new_from_uibuilder(uibldr, 'tvRecentFiles')
+        self.update_recent_files_lv()
 
         #
         #
         #
         self.dlgAbout = uibldr.get_object('dlgAbout')
-        self.dlgAbout.set_logo(icon)
+        logoSizePx = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 4
+        logo = resldr.load_pixbuf('images/dmxctrls.svg', logoSizePx, logoSizePx)
+        self.dlgAbout.set_logo(logo)
         self.dlgAbout.set_program_name(TITLE)
         self.dlgAbout.set_version('v%s' % VERSION)
         self.dlgAbout.set_copyright(COPYRIGHT)
@@ -350,53 +363,28 @@ class MainWnd():
     def setup_console_scrollability(self, s):
         self.cfg.consoleScrollability = s
 
-        self.swnd.set_policy(Gtk.PolicyType.AUTOMATIC if s else Gtk.PolicyType.NEVER,
+        self.swndControls.set_policy(Gtk.PolicyType.AUTOMATIC if s else Gtk.PolicyType.NEVER,
             Gtk.PolicyType.NEVER)
 
         self.tbtnConsoleScrollable.set_active(s)
-        self.mnuMainConsoleScrollable.set_active(s)
 
     def tbtnConsoleScrollable_toggled(self, btn):
         self.setup_console_scrollability(btn.get_active())
 
-    def mnuMainConsoleScrollable_toggled(self, mi):
-        self.setup_console_scrollability(mi.get_active())
+    def update_recent_files_lv(self):
+        self.tvRecentFiles.refresh_begin()
 
-    def update_recent_files_menu(self):
-        if not self.cfg.recentFiles:
-            self.mnuFileRecent.set_submenu()
-        else:
-            mnu = Gtk.Menu.new()
-            mnu.set_reserve_toggle_size(False)
+        for rfn in self.cfg.recentFiles:
+            self.tvRecentFiles.store.append((rfn,))
 
-            for ix, rfn in enumerate(self.cfg.recentFiles):
-                # сокращаем отображаемое имя файла, длину пока приколотим гвоздями
-                #TODO когда-нибудь сделать сокращение отображаемого в меню имени файла по человечески
-                lrfn = len(rfn)
-                if lrfn > 40:
-                    disprfn = '%s...%s' % (rfn[:3], rfn[lrfn - 34:])
-                else:
-                    disprfn = rfn
+        self.tvRecentFiles.refresh_end()
 
-                mi = Gtk.MenuItem.new_with_label(disprfn)
-                mi.connect('activate', self.file_open_recent, ix)
-                mnu.append(mi)
-
-            mnu.show_all()
-
-            self.mnuFileRecent.set_submenu(mnu)
-
-    def file_open_recent(self, wgt, ix):
-        fname = self.cfg.recentFiles[ix]
+    def recent_file_open(self, path):
+        fname = self.cfg.recentFiles[path.get_indices()[0]]
 
         # проверяем наличие файла обязательно, т.к. в списке недавних
         # могут быть уже удалённые файлы или лежащие на внешних
         # неподключённых носителях
-        # при этом метод file_open_filename() проверку производить
-        # не должен, т.к. в первую очередь расчитан на вызов после
-        # диалога выбора файла, который несуществующего файла не вернёт.
-        # кроме того, сообщение об недоступном файле _здесь_ должно
-        # отличаться от просто "нету файла"
 
         if not os.path.exists(fname):
             msg_dialog(self.window, TITLE,
@@ -404,6 +392,17 @@ class MainWnd():
         else:
             self.consoleFile = fname
             self.load_console()
+
+    def btnOpenRecentFile_clicked(self, btn):
+        _, r = self.tvRecentFiles.selection.get_selected_rows()
+        if r:
+            self.recent_file_open(r[0])
+
+    def tvRecentFiles_row_activated(self, tv, path, col):
+        self.recent_file_open(path)
+
+    def btnRemoveRecentFile_clicked(self, btn):
+        print('btnRemoveRecentFile_clicked() not implemented', file=sys.stderr)
 
     def create_named_icons(self):
         for iname, ihue in PALETTE_HUE_NAMES.items():
@@ -464,7 +463,7 @@ class MainWnd():
                 self.consoleFile = fn
                 if self.load_console():
                     self.cfg.add_recent_file(fn)
-                    self.update_recent_files_menu()
+                    self.update_recent_files_lv()
 
     def show_exception(self, ex):
         etrace = '\n'.join(format_exception(*sys.exc_info()))
@@ -521,20 +520,13 @@ class MainWnd():
                 raise Exception('Internal error: unimplemented support for control: %s' % ctltype.__name__)
 
             cwgt = cwgtclass(ctrl, self)
-            self.consoleWidgets.append(cwgt)
+            if isinstance(ctrl, Regulator):
+                self.consoleWidgets.append(cwgt)
 
             if isinstance(ctrl, Container):
-                if len(ctrl.children) == 1:
-                    cwgtchild = _build_console_widgets(ctrl.children[0])
-                else:
-                    cwgtchild = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
-
-                    for child in ctrl.children:
-                        subwgt = _build_console_widgets(child)
-                        cwgtchild.pack_start(subwgt, False, False, 0)
-
-                cwgtchild.set_border_width(WIDGET_SPACING)
-                cwgt.add_child(cwgtchild)
+                for child in ctrl.children:
+                    subwgt = _build_console_widgets(child)
+                    cwgt.add_child(subwgt)
 
             return cwgt.widget
 
@@ -558,7 +550,6 @@ class MainWnd():
                 __show_step()
                 for cc in self.console.children:
                     self.boxControls.pack_start(_build_console_widgets(cc), False, False, 0)
-                    #self.boxControls.insert(_build_console_widgets(cc), -1)
 
             except Exception as ex:
                 self.show_exception('%s error.\n%s' % (__step, ex))
@@ -568,15 +559,21 @@ class MainWnd():
 
         self.dmxSendEnabled = self.console is not None
 
-        st = os.path.splitext(os.path.split(self.consoleFile)[-1])[0]
-
         if self.console and self.console.name:
-            st = self.console.name
+            scname = self.console.name
+            stitle = os.path.splitext(os.path.split(self.consoleFile)[-1])[0]
+            stip = ''.join(self.console.comments)
+            self.stackPages.set_visible_child(self.boxConsole)
             ret = True
         else:
+            scname = ''
+            stitle = ''
+            stip = None
             ret = False
 
-        self.headerBar.set_subtitle(st)
+        self.headerBar.set_subtitle(stitle)
+        self.labConsoleName.set_text(scname)
+        self.labConsoleName.set_tooltip_text(stip)
 
         print('DMXControls is %sloaded' % ('' if ret else 'not '), file=sys.stderr)
         return ret

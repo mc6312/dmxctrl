@@ -83,9 +83,25 @@
     <property name="can-focus">False</property>
     <property name="icon-name">power-profile-power-saver-symbolic</property>
   </object>
+  <object class="GtkImage" id="imgBtnOpenRecentFile">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="icon-name">document-open-symbolic</property>
+  </object>
+  <object class="GtkImage" id="imgBtnRemoveRecentFile">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="icon-name">list-remove-all-symbolic</property>
+  </object>
   <object class="GtkImage" id="imgTbtnConsoleScrollable">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
+  </object>
+  <object class="GtkListStore" id="lstoreRecentFiles">
+    <columns>
+      <!-- column-name filename -->
+      <column type="gchararray"/>
+    </columns>
   </object>
   <object class="GtkMenu" id="mnuMain">
     <property name="visible">True</property>
@@ -101,50 +117,6 @@
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="mnuFileRecent">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">_Recent files</property>
-        <property name="use-underline">True</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkSeparatorMenuItem">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="mnuMainLightsOff">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">All lights _off</property>
-        <property name="use-underline">True</property>
-        <signal name="activate" handler="btnAllLevelsMin_clicked" swapped="no"/>
-        <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="mnuMainAllLightsOn">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">All lights o_n</property>
-        <property name="use-underline">True</property>
-        <signal name="activate" handler="btnAllLevelsMax_clicked" swapped="no"/>
-        <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkCheckMenuItem" id="mnuMainConsoleScrollable">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Toggle console scro_llability</property>
-        <property name="use-underline">True</property>
-        <signal name="toggled" handler="tbtnConsoleScrollable_toggled" swapped="no"/>
-        <accelerator key="l" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
       <object class="GtkMenuItem" id="mnuMainDumpChannels">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -155,18 +127,18 @@
       </object>
     </child>
     <child>
-      <object class="GtkSeparatorMenuItem">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-      </object>
-    </child>
-    <child>
       <object class="GtkMenuItem" id="mnuMainAbout">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">About...</property>
+        <property name="label" translatable="yes">_About...</property>
         <property name="use-underline">True</property>
         <signal name="activate" handler="mnuMainAbout_activate" swapped="no"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
       </object>
     </child>
     <child>
@@ -185,7 +157,249 @@
     <property name="window-position">mouse</property>
     <signal name="destroy" handler="wnd_destroy" swapped="no"/>
     <child>
-      <placeholder/>
+      <object class="GtkStack" id="stackPages">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="border-width">4</property>
+        <child>
+          <object class="GtkBox" id="boxConsole">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">4</property>
+            <child>
+              <object class="GtkBox" id="boxConsoleBar">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="spacing">4</property>
+                <child>
+                  <object class="GtkButton" id="btnAllLevelsMin">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="tooltip-text" translatable="yes">All lights off</property>
+                    <property name="image">imgBtnAllLevelsMin</property>
+                    <signal name="clicked" handler="btnAllLevelsMin_clicked" swapped="no"/>
+                    <accelerator key="0" signal="clicked" modifiers="GDK_CONTROL_MASK"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btnAllLevelsMax">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="tooltip-text" translatable="yes">All lights to maximum level</property>
+                    <property name="image">imgBtnAllLevelsMax</property>
+                    <signal name="clicked" handler="btnAllLevelsMax_clicked" swapped="no"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="labConsoleName">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="label" translatable="yes">...</property>
+                    <property name="ellipsize">end</property>
+                    <attributes>
+                      <attribute name="weight" value="bold"/>
+                    </attributes>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="tbtnConsoleScrollable">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="tooltip-text" translatable="yes">Toggle console scrollability</property>
+                    <property name="image">imgTbtnConsoleScrollable</property>
+                    <signal name="toggled" handler="tbtnConsoleScrollable_toggled" swapped="no"/>
+                    <accelerator key="l" signal="clicked" modifiers="GDK_CONTROL_MASK"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack-type">end</property>
+                    <property name="position">4</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSeparator">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkScrolledWindow" id="swndControls">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="tooltip-text" translatable="yes">Console</property>
+                <property name="overlay-scrolling">False</property>
+                <property name="propagate-natural-width">True</property>
+                <child>
+                  <object class="GtkViewport" id="vpControls">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="shadow-type">none</property>
+                    <child>
+                      <object class="GtkBox" id="boxControls">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="spacing">4</property>
+                        <child>
+                          <placeholder/>
+                        </child>
+                        <child>
+                          <placeholder/>
+                        </child>
+                        <child>
+                          <placeholder/>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+            <accelerator key="1" signal="grab-focus" modifiers="GDK_MOD1_MASK"/>
+          </object>
+          <packing>
+            <property name="name">pageConsole</property>
+            <property name="title" translatable="yes">Console</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="boxRecents">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="tooltip-text" translatable="yes">Open recent console file</property>
+            <property name="spacing">4</property>
+            <child>
+              <object class="GtkScrolledWindow" id="swndRecentFiles">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="hscrollbar-policy">never</property>
+                <property name="shadow-type">in</property>
+                <child>
+                  <object class="GtkTreeView" id="tvRecentFiles">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="model">lstoreRecentFiles</property>
+                    <property name="headers-visible">False</property>
+                    <property name="show-expanders">False</property>
+                    <property name="enable-grid-lines">both</property>
+                    <property name="enable-tree-lines">True</property>
+                    <signal name="row-activated" handler="tvRecentFiles_row_activated" swapped="no"/>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection"/>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="colRecentFilename">
+                        <child>
+                          <object class="GtkCellRendererText" id="crRecentFilename"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox" id="boxRecentFilesCtls">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
+                <child>
+                  <object class="GtkButton" id="btnOpenRecentFile">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="tooltip-text" translatable="yes">Open selected file</property>
+                    <property name="image">imgBtnOpenRecentFile</property>
+                    <signal name="clicked" handler="btnOpenRecentFile_clicked" swapped="no"/>
+                    <style>
+                      <class name="suggested-action"/>
+                    </style>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btnRemoveRecentFile">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="tooltip-text" translatable="yes">Remove file from list</property>
+                    <property name="image">imgBtnRemoveRecentFile</property>
+                    <signal name="clicked" handler="btnRemoveRecentFile_clicked" swapped="no"/>
+                    <style>
+                      <class name="destructive-action"/>
+                    </style>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="pack-type">end</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="name">pageRecentFiles</property>
+            <property name="title" translatable="yes">Recent files</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
     </child>
     <child type="titlebar">
       <object class="GtkHeaderBar" id="headerBar">
@@ -213,42 +427,13 @@
           </packing>
         </child>
         <child>
-          <object class="GtkButton" id="btnAllLevelsMin">
+          <object class="GtkStackSwitcher" id="stswPages">
             <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="tooltip-text" translatable="yes">All lights off</property>
-            <property name="image">imgBtnAllLevelsMin</property>
-            <signal name="clicked" handler="btnAllLevelsMin_clicked" swapped="no"/>
+            <property name="can-focus">False</property>
+            <property name="stack">stackPages</property>
           </object>
           <packing>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkButton" id="btnAllLevelsMax">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="tooltip-text" translatable="yes">All lights to maximum level</property>
-            <property name="image">imgBtnAllLevelsMax</property>
-            <signal name="clicked" handler="btnAllLevelsMax_clicked" swapped="no"/>
-          </object>
-          <packing>
-            <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkToggleButton" id="tbtnConsoleScrollable">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="tooltip-text" translatable="yes">Toggle console scrollability</property>
-            <property name="image">imgTbtnConsoleScrollable</property>
-            <signal name="toggled" handler="tbtnConsoleScrollable_toggled" swapped="no"/>
-          </object>
-          <packing>
-            <property name="position">3</property>
+            <property name="position">4</property>
           </packing>
         </child>
       </object>
