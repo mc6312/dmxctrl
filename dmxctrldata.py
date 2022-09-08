@@ -229,32 +229,18 @@ class Container(NamedControl):
     соотв. атрибутов во вложенных контролах.
 
     Атрибуты экземпляра класса (в дополнение к унаследованным):
-        children    - список вложенных экземпляров Control."""
-
-    OPTIONS = NamedControl.OPTIONS
-
-    def __init__(self):
-        super().__init__()
-
-        self.children = []
-
-
-class Panel(Container):
-    """Панель, содержащая другие элементы.
-
-    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        children    - список вложенных экземпляров Control;
         vertical    - булевское значение; если равно True -
                       вложенные элементы располагаются по вертикали;
                       значение по умолчанию - False (горизонтальное
                       расположение элементов)."""
 
-    TAG = 'panel'
-    PARENTS = {'dmxcontrols', 'panel'}
-    OPTIONS = Container.OPTIONS | {'vertical'}
+    OPTIONS = NamedControl.OPTIONS | {'vertical'}
 
     def __init__(self):
         super().__init__()
 
+        self.children = []
         self.vertical = False
 
     def setParameter(self, ns, vs):
@@ -262,6 +248,13 @@ class Panel(Container):
 
         if ns == 'vertical':
             self.vertical = self.strArgToBool(vs)
+
+
+class Panel(Container):
+    """Панель, содержащая другие элементы."""
+
+    TAG = 'panel'
+    PARENTS = {'dmxcontrols', 'panel'}
 
 
 class Regulator(NamedControl):
@@ -546,6 +539,6 @@ if __name__ == '__main__':
             for c in ctl.children:
                 __dump_ctl(c, indent)
 
-    print('%s universe=%s channel=%s' % (dmxc.name, dmxc.universe, dmxc.channel))
+    print('\033[1m%s\033[0m' % _dump_dict(dmxc.__dict__))
     for un in dmxc.children:
         __dump_ctl(un, '')

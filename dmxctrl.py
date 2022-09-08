@@ -269,11 +269,12 @@ class MainWnd():
         self.window, self.headerBar, imgTbtnConsoleScrollable,\
         self.tbtnConsoleScrollable, self.labConsoleName,\
         self.stackPages, self.boxConsole, self.boxRecents,\
-        self.swndControls, self.boxControls = get_ui_widgets(uibldr,
+        self.swndControls, self.vpControls = get_ui_widgets(uibldr,
             'wndConsole', 'headerBar', 'imgTbtnConsoleScrollable',
             'tbtnConsoleScrollable', 'labConsoleName',
             'stackPages', 'boxConsole', 'boxRecents',
-            'swndControls', 'boxControls')
+            'swndControls', 'vpControls')
+        self.boxControls = None
 
         imgTbtnConsoleScrollable.set_from_pixbuf(resldr.load_pixbuf_icon_size('images/consolescrollable.svg', iconSize))
         #
@@ -294,7 +295,7 @@ class MainWnd():
         self.smallIconSizePx = Gtk.IconSize.lookup(iconSize)[-1]
 
         winIconSizePx = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 2
-        icon = resldr.load_pixbuf('images/dmxctrls.svg', winIconSizePx, winIconSizePx)
+        icon = resldr.load_pixbuf('images/dmxctrl.png', winIconSizePx, winIconSizePx)
         self.window.set_icon(icon)
 
         self.window.set_title(TITLE_VERSION)
@@ -319,7 +320,7 @@ class MainWnd():
         #
         self.dlgAbout = uibldr.get_object('dlgAbout')
         logoSizePx = Gtk.IconSize.lookup(Gtk.IconSize.DIALOG)[1] * 4
-        logo = resldr.load_pixbuf('images/dmxctrls.svg', logoSizePx, logoSizePx)
+        logo = resldr.load_pixbuf('images/dmxctrl.png', logoSizePx, logoSizePx)
         self.dlgAbout.set_logo(logo)
         self.dlgAbout.set_program_name(TITLE)
         self.dlgAbout.set_version('v%s' % VERSION)
@@ -504,8 +505,9 @@ class MainWnd():
             for i in range(len(self.channels)):
                 self.channels[i] = 0
 
-            for wg in self.boxControls.get_children():
-                wg.destroy()
+            if self.boxControls:
+                self.boxControls.destroy()
+                self.boxControls = None
 
         _clear_console()
 
@@ -543,11 +545,14 @@ class MainWnd():
                 __show_step()
 
                 self.console = DMXControls(self.consoleFile)
-
                 self.headerBar.set_tooltip_text(self.console.getCommentStr())
 
                 __step = 'Building console UI'
                 __show_step()
+                self.boxControls = Gtk.Box.new(Gtk.Orientation.VERTICAL if self.console.vertical else Gtk.Orientation.HORIZONTAL,
+                                               WIDGET_SPACING)
+                self.vpControls.add(self.boxControls)
+
                 for cc in self.console.children:
                     self.boxControls.pack_start(_build_console_widgets(cc), False, False, 0)
 
