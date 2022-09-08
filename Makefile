@@ -25,9 +25,9 @@ arcname = $(basename)$(arcx)
 srcarcname = $(basename)-$(branch)-src$(arcx)
 pysrcs = *.py
 uisrcs = *.ui
-grsrcs = $(imagedir)/*.svg
+grsrcs = $(imagedir)/*.*
 srcs = $(pysrcs) $(uisrcs) $(grsrcs)
-iconfn = $(basename).svg
+iconfn = $(basename).png
 desktopfn = $(basename).desktop
 
 app:
@@ -79,7 +79,7 @@ desktop:
 	@echo "Icon=$(shell realpath $(icondir)/$(iconfn))" >>$(desktopfn)
 	@echo "Type=Application" >>$(desktopfn)
 	@echo "StartupWMClass=$(basename)" >>$(desktopfn)
-	@echo "Categories=Office;Database;Finance" >>$(desktopfn)
+	@echo "Categories=Multimedia;Utility" >>$(desktopfn)
 
 install:
 	make app

@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.6%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.7%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
