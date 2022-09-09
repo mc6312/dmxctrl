@@ -19,7 +19,8 @@ title_version = $(shell python3 -c 'from $(srcversion) import TITLE_VERSION; pri
 title = $(shell python3 -c 'from $(srcversion) import TITLE; print(TITLE)')
 #
 todo = TODO
-docs = $(todo) COPYING Changelog README.md
+readme = README.md
+docs = $(todo) COPYING Changelog $(readme)
 zipname = $(basename).zip
 arcname = $(basename)$(arcx)
 srcarcname = $(basename)-$(branch)-src$(arcx)
