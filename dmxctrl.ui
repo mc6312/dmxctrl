@@ -127,18 +127,38 @@
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="mnuMainAbout">
+      <object class="GtkMenuItem" id="mnuMainSwitchToConsole">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">_About...</property>
+        <property name="label" translatable="yes">Switch to _console</property>
         <property name="use-underline">True</property>
-        <signal name="activate" handler="mnuMainAbout_activate" swapped="no"/>
+        <signal name="activate" handler="mnuMainSwitchToConsole_activate" swapped="no"/>
+        <accelerator key="1" signal="activate" modifiers="GDK_MOD1_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuMainSwitchToRecents">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Switch to _recent files</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="mnuMainSwitchToRecents_activate" swapped="no"/>
+        <accelerator key="2" signal="activate" modifiers="GDK_MOD1_MASK"/>
       </object>
     </child>
     <child>
       <object class="GtkSeparatorMenuItem">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuMainAbout">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">_About...</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="mnuMainAbout_activate" swapped="no"/>
       </object>
     </child>
     <child>
@@ -149,6 +169,14 @@
         <property name="use-underline">True</property>
         <signal name="activate" handler="wnd_destroy" swapped="no"/>
         <accelerator key="q" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">__glade_unnamed_13</property>
+        <property name="use-underline">True</property>
       </object>
     </child>
   </object>
