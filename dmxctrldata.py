@@ -27,8 +27,11 @@ import os.path
 
 
 # значения цветов для встроенной палитры и иконок
+HUE_BLACK = -1
+HUE_WHITE = -2
 __HUE_360 = 1.0 / 360
 PALETTE_HUE_NAMES = {
+    'black':        HUE_BLACK,
     'red':          0   * __HUE_360,
     'orange':       30  * __HUE_360,
     'yellow':       60  * __HUE_360,
@@ -40,6 +43,7 @@ PALETTE_HUE_NAMES = {
     'blue':         240 * __HUE_360,
     'purple':       260 * __HUE_360,
     'magenta':      300 * __HUE_360,
+    'white':        HUE_WHITE,
     }
 
 
@@ -80,7 +84,9 @@ class Control():
                       окончательное присваивание значений производится
                       в методе DMXControls.endElement() (аналогично атрибутам
                       NamedControl.name), т.е. после завершения загрузки
-                      все важные атрибуты будут так или иначе заданы."""
+                      все важные атрибуты будут так или иначе заданы;
+        children    - список дочерних контролов (для потомков Container)
+                      или список контролов с данными для самого контрола."""
 
     TAG = None
     PARENTS = set()
@@ -94,39 +100,57 @@ class Control():
         self.console = None
         self.comments = []
         self.channel = None
+        self.children = []
 
-    def strArgToInt(self, s, strict=True):
+    def strAttrToInt(self, ns, vs, strict=True, minv=None, maxv=None):
         """Преобразование строкового значения атрибута в целое.
 
         Параметры:
-            s       - строка;
+            ns      - строка,  имя атрибута (для отображения в сообщениях
+                      об ошибках);
+            vs      - строка, значение атрибута;
             strict  - булевское значение;
                       если False - s может быть спецзначением
                       "*" или "auto", в этом случае метод возвращает
                       None, иначе int(s) должно быть только
-                      положительным целым числом."""
+                      положительным целым числом;
+            minv    - None или целое число; минимальное значение;
+                      если None - значение не проверяется;
+            maxv    - None или целое число; максимальное значение;
+                      если None - значение не проверяется."""
 
-        if s.lower() in ('*', 'auto'):
+        if vs.lower() in ('*', 'auto'):
             if not strict:
                 return None
 
-            raise ValueError('attribute value must be positive integer')
+            raise ValueError('attribute "%s" must be positive integer' % ns)
 
-        return int(s)
+        v = int(vs)
 
-    def strArgToBool(self, s):
-        """Преобразование строкового значения атрибута в булевское."""
+        if (minv is not None and v < minv) or (maxv is not None and v > maxv):
+            raise ValueError('attribute "%s" is out of range' % ns)
+
+        return v
+
+    def strAttrToBool(self, ns, vs):
+        """Преобразование строкового значения атрибута в булевское.
+
+        Параметры:
+            ns      - строка,  имя атрибута (для отображения в сообщениях
+                      об ошибках);
+            vs      - строка, значение атрибута."""
 
         try:
-            return bool(int(s))
+            return bool(int(vs))
         except ValueError:
-            s = s.lower()
-            if s in ('true', 'yes'):
+            vs = vs.lower()
+
+            if vs in ('true', 'yes'):
                 return True
-            elif s in ('false', 'no'):
+            elif vs in ('false', 'no'):
                 return False
             else:
-                raise ValueError('attribute value must be boolean or integer')
+                raise ValueError('attribute "%s" must be boolean or integer' % ns)
 
     def setParameter(self, ns, vs):
         """Установка значения атрибута экземпляра класса.
@@ -140,9 +164,7 @@ class Control():
         Метод может быть перекрыт классом-потомком."""
 
         if ns == 'channel':
-            self.channel = self.strArgToInt(vs, False)
-            if self.channel is not None and (self.channel < 1 or self.channel > 512):
-                raise ValueError('channel number out of range')
+            self.channel = self.strAttrToInt(ns, vs, False, 1, 512)
 
     def getCommentStr(self):
         return ' '.join(self.comments)
@@ -162,26 +184,20 @@ class NamedControl(Control):
     Необязательные атрибуты экземпляра класса (в дополнение
     к наследственным):
         name        - строка, имя для отображения в UI;
-                      если не указано - при загрузке файла .dmxctrl
-                      присваивается имя по умолчанию - "ИмяТипа #N",
-                      где "N" - порядковый номер контрола;
+                      если не указано - контрол будет отображаться
+                      без текстовой метки;
         icon        - строка, имя графического файла с иконкой или
                       встроенной иконки;
                       если не указано - в UI иконки не будет;
         isInternalIcon - внутренний атрибут, True, если в self.icon
-                      имя встроенной иконки;
-        hidename    - булевское значение;
-                      если True - UI не должен отображать имя;
-                      на отображение иконки этот параметр не влияет;
-                      по умолчанию - False."""
+                      имя встроенной иконки."""
 
-    OPTIONS = Control.OPTIONS | {'name', 'icon', 'hidename'}
+    OPTIONS = Control.OPTIONS | {'name', 'icon'}
 
     def __init__(self):
         super().__init__()
 
         self.name = ''
-        self.hidename = False
         self.icon = None
         self.isInternalIcon = False
 
@@ -218,8 +234,6 @@ class NamedControl(Control):
             # правильность пути проверяется
             # сама иконка загружается при построении UI
             self.__setup_icon_path(vs)
-        elif ns == 'hidename':
-            self.hidename = self.strArgToBool(vs)
 
 
 class Container(NamedControl):
@@ -228,8 +242,9 @@ class Container(NamedControl):
     Атрибут "channel" только хранит значение для инициализации
     соотв. атрибутов во вложенных контролах.
 
+    Атрибут "children" содержит список вложенных экземпляров Control.
+
     Атрибуты экземпляра класса (в дополнение к унаследованным):
-        children    - список вложенных экземпляров Control;
         vertical    - булевское значение; если равно True -
                       вложенные элементы располагаются по вертикали;
                       значение по умолчанию - False (горизонтальное
@@ -240,14 +255,13 @@ class Container(NamedControl):
     def __init__(self):
         super().__init__()
 
-        self.children = []
         self.vertical = False
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'vertical':
-            self.vertical = self.strArgToBool(vs)
+            self.vertical = self.strAttrToBool(ns, vs)
 
 
 class Panel(Container):
@@ -262,7 +276,56 @@ class Regulator(NamedControl):
     Этот класс - базовый для прочих активных контролов, напрямую
     не используется."""
 
-    pass
+    PARENTS = {'dmxcontrols', 'panel'}
+
+
+class Switch(Regulator):
+    """Переключатель готовых значений.
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        vertical    - булевское значение; если равно True -
+                      движок вертикальный;
+                      значение по умолчанию - True."""
+
+    TAG = 'switch'
+    OPTIONS = Regulator.OPTIONS | {'vertical'}
+
+    def __init__(self):
+        super().__init__()
+
+        self.options = []
+        self.vertical = True
+
+    def setParameter(self, ns, vs):
+        super().setParameter(ns, vs)
+
+        if ns == 'vertical':
+            self.vertical = self.strAttrToBool(ns, vs)
+
+    def checkParameters(self):
+        if len(self.children) < 2:
+            raise ValueError('%s must contain at least two options' % self.__class__.__name__)
+
+
+class SwitchOption(NamedControl):
+    TAG = 'option'
+    PARENTS = {'switch'}
+    PARAMETERS = NamedControl.PARAMETERS | {'value'}
+
+    def __init__(self):
+        super().__init__()
+
+        self.value = 0
+
+    def __repr__(self):
+        return '%s(name="%s", value=%d, icon="%s")' % (self.__class__.__name__,
+                    self.name, self.value, self.icon)
+
+    def setParameter(self, ns, vs):
+        super().setParameter(ns, vs)
+
+        if ns == 'value':
+            self.value = self.strAttrToInt(ns, vs, minv=0, maxv=255)
 
 
 class Level(Regulator):
@@ -282,7 +345,6 @@ class Level(Regulator):
                       значение по умолчанию - True."""
 
     TAG = 'level'
-    PARENTS = {'dmxcontrols', 'panel'}
     OPTIONS = Regulator.OPTIONS | {'value', 'steps', 'vertical'}
     CHANNELS = 1
 
@@ -297,15 +359,11 @@ class Level(Regulator):
         super().setParameter(ns, vs)
 
         if ns == 'value':
-            self.value = self.strArgToInt(vs)
-            if self.value < 0 or self.value > 255:
-                raise ValueError('value out of range')
+            self.value = self.strAttrToInt(ns, vs, minv=0, maxv=255)
         elif ns == 'steps':
-            self.steps = self.strArgToInt(vs)
-            if self.steps < 0 or self.steps > 32:
-                raise ValueError('steps out of range')
+            self.steps = self.strAttrToInt(ns, vs, minv=0, maxv=32)
         elif ns == 'vertical':
-            self.vertical = self.strArgToBool(vs)
+            self.vertical = self.strAttrToBool(ns, vs)
 
 
 class ColorLevel(Level):
@@ -360,8 +418,6 @@ class DMXControls(Container, xml.sax.ContentHandler):
         self.stackTop = None
         self.curChannel = 1
 
-        self.namedCounts = {DMXControls:0, Panel:0, Level:0}
-
         parser = xml.sax.make_parser()
         parser.setContentHandler(self)
         parser.parse(filename)
@@ -383,13 +439,13 @@ class DMXControls(Container, xml.sax.ContentHandler):
             self.locator.getColumnNumber(),
             '' if not ss else ' (%s)' % ss)
 
-    CHILD_CLASSES = (Panel, Level, ColorLevel)
+    CHILD_CLASSES = (Panel, Level, ColorLevel, Switch, SwitchOption)
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'universe':
-            self.universe = self.strArgToInt(vs)
+            self.universe = self.strAttrToInt(ns, vs)
             if self.universe is None:
                 self.universe = 1
             elif self.universe < 1:
@@ -487,14 +543,10 @@ class DMXControls(Container, xml.sax.ContentHandler):
 
     def endElement(self, name):
         if self.stackTop.obj:
-            self.stackTop.obj.checkParameters()
-
-            # принудительно создаём имена объектам, если имён не было в файле
-            otype = type(self.stackTop.obj)
-            if otype in self.namedCounts and not self.stackTop.obj.name:
-                cnt = self.namedCounts[otype] + 1
-                self.namedCounts[otype] = cnt
-                self.stackTop.obj.name = '%s #%d' % (otype.__name__, cnt)
+            try:
+                self.stackTop.obj.checkParameters()
+            except Exception as ex:
+                raise self.Error(self, str(ex)) from ex
 
         #
         self.stackTop = self.stack.pop() if self.stack else None
@@ -516,13 +568,13 @@ if __name__ == '__main__':
     dmxc = DMXControls('example.dmxctrl')
     #print(help(dmxc))
 
-    def _dump_dict(d):
+    def _dump_dict(d, indent):
         r = []
 
         for k, v in d.items():
-            r.append('%s="%s"' % (k, v))
+            r.append('%s%s="%s"' % ('%s - ' % indent, k, v))
 
-        return ', '.join(r)
+        return '\n'.join(r)
 
     def __dump_ctl(ctl, indent):
         print('%s%s %s:"%s"%s %s' % (
@@ -531,7 +583,7 @@ if __name__ == '__main__':
                 ctl.__class__.__name__,
                 ctl.name,
                 '' if not ctl.icon else ' (%s)' % ctl.icon,
-                _dump_dict(ctl.__dict__)))
+                _dump_dict(ctl.__dict__, indent)))
 
         indent += ' '
 
@@ -539,6 +591,6 @@ if __name__ == '__main__':
             for c in ctl.children:
                 __dump_ctl(c, indent)
 
-    print('\033[1m%s\033[0m' % _dump_dict(dmxc.__dict__))
+    print('\033[1m%s\033[0m' % _dump_dict(dmxc.__dict__, ' '))
     for un in dmxc.children:
         __dump_ctl(un, '')

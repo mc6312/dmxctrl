@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.6%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.8%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -48,6 +48,17 @@ from colorsys import hls_to_rgb
 
 COLORS_PALETTE_COLS = len(PALETTE_HUE_NAMES)
 
+def hue_to_rgba(hue, saturation=1.0):
+    if hue == HUE_BLACK:
+        r, g, b = 0, 0, 0
+    elif hue == HUE_WHITE:
+        r, g, b = 1.0, 1.0, 1.0
+    else:
+        r, g, b = hls_to_rgb(hue, 0.5, saturation)
+
+    return Gdk.RGBA(r, g, b, 1.0)
+
+
 def __init_palette():
     pal = []
 
@@ -55,14 +66,16 @@ def __init_palette():
 
     for sat in range(__PALETTE_SATURATIONS):
         for hue in PALETTE_HUE_NAMES.values():
-            r, g, b = hls_to_rgb(hue, 0.5, 1.0 / (1 + sat))
-            rgba = Gdk.RGBA(r, g, b, 1.0)
-            pal.append(rgba)
+            pal.append(hue_to_rgba(hue, 1.0 / (1 + sat)))
 
     return pal
 
 
 COLORS_PALETTE = __init_palette()
+
+
+def bool_gtk_orientation(v):
+    return Gtk.Orientation.VERTICAL if v else Gtk.Orientation.HORIZONTAL
 
 
 class ControlWidget():
@@ -121,14 +134,14 @@ class PanelWidget(ControlWidget):
         self.widget = Gtk.Frame.new()
         self.widget.set_can_focus(False)
 
-        if not self.control.hidename or self.control.icon:
+        if self.control.name or self.control.icon:
             lbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, WIDGET_SPACING)
             lbox.set_border_width(WIDGET_SPACING)
 
             if self.control.icon:
                 lbox.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
 
-            if not self.control.hidename:
+            if self.control.name:
                 lbox.pack_start(Gtk.Label.new(self.control.name), False, False, 0)
 
             self.widget.set_label_widget(lbox)
@@ -136,13 +149,55 @@ class PanelWidget(ControlWidget):
         self.widget.set_label_align(0.5, 0.5)
         self.widget.set_tooltip_text(self.control.getCommentStr())
 
-        self.box = Gtk.Box.new(Gtk.Orientation.VERTICAL if self.control.vertical else Gtk.Orientation.HORIZONTAL,
+        self.box = Gtk.Box.new(bool_gtk_orientation(self.control.vertical),
                            WIDGET_SPACING)
         self.box.set_border_width(WIDGET_SPACING)
         self.widget.add(self.box)
 
     def add_child(self, cw):
         self.box.pack_start(cw, False, False, 0)
+
+
+class SwitchWidget(ControlWidget):
+    def setup(self):
+        _ornt = bool_gtk_orientation(self.control.vertical)
+
+        swbox = Gtk.Box.new(_ornt, 0)
+        swbox.get_style_context().add_class('linked')
+
+        if self.control.name or self.control.icon:
+            self.widget = Gtk.Box.new(_ornt, WIDGET_SPACING)
+
+            if self.control.icon:
+                self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
+
+            if self.control.name:
+                self.widget.pack_start(Gtk.Label.new(self.control.name), False, False, 0)
+
+            self.widget.pack_start(swbox, False, False, 0)
+        else:
+            self.widget = swbox
+
+        rgrp = None
+        for opt in self.control.children:
+            rbtn = Gtk.RadioButton.new_with_label_from_widget(rgrp, opt.name)
+            rbtn.set_mode(False)
+            if opt.icon:
+                rbtn.set_image(self.owner.load_icon_image(opt))
+
+            if opt.comments:
+                rbtn.set_tooltip_text(''.join(opt.comments))
+
+            if not rgrp:
+                rgrp = rbtn
+
+            rbtn.connect('toggled', self.value_changed, opt.value)
+
+            swbox.pack_start(rbtn, False, False, 0)
+
+    def value_changed(self, widget, value=None):
+        if value is not None and widget.get_active():
+            self.owner.set_channel_values(self.control.channel, [value])
 
 
 class LevelWidget(ControlWidget):
@@ -160,16 +215,16 @@ class LevelWidget(ControlWidget):
 
         tts = self.control.getCommentStr()
 
-        if not self.control.hidename:
+        if self.control.icon:
+            self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
+
+        if self.control.name:
             slab = Gtk.Label.new(self.control.name)
             slab.set_tooltip_text(tts)
             if self.control.vertical and (len(self.control.name) > 2):
                 slab.set_angle(270)
 
             self.widget.pack_start(slab, False, False, 0)
-
-        if self.control.icon:
-            self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
 
         #!!!
         if self.control.steps > 0:
@@ -246,7 +301,8 @@ class ColorLevelWidget(LevelWidget):
 
 CONTROL_WIDGETS = {Panel: PanelWidget,
     Level: LevelWidget,
-    ColorLevel: ColorLevelWidget}
+    ColorLevel: ColorLevelWidget,
+    Switch: SwitchWidget}
 
 
 class MainWnd():
@@ -423,11 +479,17 @@ class MainWnd():
 
             radius1 = radius - 1.0
 
-            cc.set_source(cairo.SolidPattern(*hls_to_rgb(ihue, 0.5, 1.0)))
+            cc.set_source(cairo.SolidPattern(*hue_to_rgba(ihue)))
             cc.arc(center, center, radius1, 0.0, circle)
             cc.fill()
 
             self.icons[iname.lower()] = Gdk.pixbuf_get_from_surface(csurf, 0, 0, self.smallIconSizePx, self.smallIconSizePx)
+
+    def mnuMainSwitchToConsole_activate(self, mnu):
+        self.stackPages.set_visible_child(self.boxConsole)
+
+    def mnuMainSwitchToRecents_activate(self, mnu):
+        self.stackPages.set_visible_child(self.boxRecents)
 
     def mnuMainAbout_activate(self, mnu):
         self.dlgAbout.show_all()
@@ -537,19 +599,22 @@ class MainWnd():
         __step = ''
 
         def __show_step():
-            print('%s...' % __step, file=sys.stderr)
+            print('* %s...' % __step, file=sys.stderr)
 
         if self.consoleFile:
             try:
-                __step = 'Loading console from "%s"' % self.consoleFile
+                __step = 'loading console from "%s"' % self.consoleFile
                 __show_step()
 
                 self.console = DMXControls(self.consoleFile)
+                if not self.console.children:
+                    raise Exception('No controls defined in file "%s"' % self.consoleFile)
+
                 self.headerBar.set_tooltip_text(self.console.getCommentStr())
 
-                __step = 'Building console UI'
+                __step = 'building console UI'
                 __show_step()
-                self.boxControls = Gtk.Box.new(Gtk.Orientation.VERTICAL if self.console.vertical else Gtk.Orientation.HORIZONTAL,
+                self.boxControls = Gtk.Box.new(bool_gtk_orientation(self.console.vertical),
                                                WIDGET_SPACING)
                 self.vpControls.add(self.boxControls)
 
@@ -557,10 +622,11 @@ class MainWnd():
                     self.boxControls.pack_start(_build_console_widgets(cc), False, False, 0)
 
             except Exception as ex:
-                self.show_exception('%s error.\n%s' % (__step, ex))
+                self.show_exception('Error %s.\n%s' % (__step, ex))
                 _clear_console()
 
-        self.boxControls.show_all()
+        if self.boxControls:
+            self.boxControls.show_all()
 
         self.dmxSendEnabled = self.console is not None
 
@@ -580,7 +646,7 @@ class MainWnd():
         self.labConsoleName.set_text(scname)
         self.labConsoleName.set_tooltip_text(stip)
 
-        print('DMXControls is %sloaded' % ('' if ret else 'not '), file=sys.stderr)
+        print('Console is %sloaded' % ('' if ret else 'not '), file=sys.stderr)
         return ret
 
     def set_channel_values(self, channel, values):
