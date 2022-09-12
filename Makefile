@@ -59,7 +59,7 @@ update:
 commit:
 	make todo
 	git commit -a -uno -m "$(version)"
-	@echo -e "\033[31mне забудь сказать git push\033[0m"
+	@echo "\033[31mне забудь сказать git push\033[0m"
 
 show-branch:
 	@echo "$(branch)"
