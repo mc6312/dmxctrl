@@ -171,14 +171,6 @@
         <accelerator key="q" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
-    <child>
-      <object class="GtkMenuItem">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">__glade_unnamed_13</property>
-        <property name="use-underline">True</property>
-      </object>
-    </child>
   </object>
   <object class="GtkWindow" id="wndConsole">
     <property name="can-focus">False</property>
