@@ -9,7 +9,7 @@
     </panel>
     <panel name="Other panel" vertical="True">
         <level steps="1" vertical="False">Движок чего-то</level>
-        <switch name="Switch" vertical="False">
+        <switch name="Switch" vertical="False" active="2">
             <option name="min" icon="!black" value="0">Минимальное значение</option>
             <option name="mid" value="128">Среднее значение</option>
             <option name="max" icon="!white" value="255">Максимальное значение</option>
