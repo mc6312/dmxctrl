@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.9%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.10%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -38,7 +38,6 @@ import sys
 import os.path
 from traceback import format_exception
 from array import array
-from ola.ClientWrapper import ClientWrapper
 
 from dmxctrldata import *
 from dmxctrlcfg import *
@@ -383,14 +382,14 @@ class MainWnd():
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self.errorTitle = '%s error' % TITLE_VERSION
+        # детальный заголовок сообщения об ошибке - только при инициализации
+        # позже она не будет нужна
 
         resldr = get_resource_loader()
         uibldr = resldr.load_gtk_builder('dmxctrl.ui')
 
         iconSize = Gtk.IconSize.MENU
-
-        print('DMX client wrapper initialization...', file=sys.stderr)
-        self.wrapper = ClientWrapper()
 
         self.window, self.headerBar, imgTbtnConsoleScrollable,\
         self.tbtnConsoleScrollable, self.labConsoleName,\
@@ -400,6 +399,17 @@ class MainWnd():
             'tbtnConsoleScrollable', 'labConsoleName',
             'stackPages', 'boxConsole', 'boxRecents',
             'swndControls', 'vpControls')
+
+        #
+        print('DMX client wrapper initialization...', file=sys.stderr)
+        try:
+            from ola.ClientWrapper import ClientWrapper
+            self.wrapper = ClientWrapper()
+        except Exception as ex:
+            self.show_exception(ex)
+            sys.exit(-1)
+        #
+
         self.boxControls = None
 
         imgTbtnConsoleScrollable.set_from_pixbuf(resldr.load_pixbuf_icon_size('images/consolescrollable.svg', iconSize))
@@ -481,6 +491,8 @@ class MainWnd():
         print('Setting up console...', file=sys.stderr)
         if self.consoleFile:
             self.load_console()
+
+        self.errorTitle = 'Error'
 
         self.window.show_all()
         uibldr.connect_signals(self)
@@ -604,9 +616,10 @@ class MainWnd():
 
         print('%s\n%s' % (ex, etrace), file=sys.stderr)
 
-        msg_dialog(self.window, 'Error', ex)
+        msg_dialog(self.window, self.errorTitle, ex)
 
     def __process_cmdline(self):
+        #TODO сделать человеческую обработку командной строки
         if len(sys.argv) >= 2:
             self.consoleFile = os.path.abspath(sys.argv[1])
 
@@ -675,6 +688,9 @@ class MainWnd():
             try:
                 __step = 'loading console from "%s"' % self.consoleFile
                 __show_step()
+
+                if not os.path.exists(self.consoleFile):
+                    raise Exception('File "%s" is not found' % self.consoleFile)
 
                 self.console = DMXControls(self.consoleFile)
                 if not self.console.children:
