@@ -58,11 +58,7 @@ class Control():
         PARAMETERS = set()      - множество строк - имена обязательных
                                   параметров;
         OPTIONS = {'channel'}   - множество строк - имена необязательных
-                                  параметров;
-        CHANNELS = 0            - количество каналов, занимаемых контролом;
-                                  0 для контейнеров (и прочих, не изменяющих
-                                  значения в каналах),
-                                  >0 для изменяющих значения.
+                                  параметров.
         Атрибуты, содержащие множества, должны дополняться или
         перекрываться в классе-потомке, прочие - должны перекрываться.
 
@@ -92,7 +88,6 @@ class Control():
     PARENTS = set()
     PARAMETERS = set()
     OPTIONS = {'channel'}
-    CHANNELS = 0
 
     def __init__(self):
         # конструкторы задают значения атрибутов по умолчанию,
@@ -101,6 +96,18 @@ class Control():
         self.comments = []
         self.channel = None
         self.children = []
+
+    def getNChannels(self):
+        """Возвращает количество каналов, занимаемых контролом.
+
+        Потомки Container (и прочих, не изменяющих значения в каналах)
+        должны возвращать 0.
+
+        Потомки Regulator и подобные должны возвращать ненулевые значения.
+
+        Метод может быть перекрыт классом-потомком."""
+
+        return 0
 
     def strAttrToInt(self, ns, vs, strict=True, minv=None, maxv=None):
         """Преобразование строкового значения атрибута в целое.
@@ -288,23 +295,32 @@ class Switch(Regulator):
                       значение по умолчанию - True."""
 
     TAG = 'switch'
-    OPTIONS = Regulator.OPTIONS | {'vertical'}
+    OPTIONS = Regulator.OPTIONS | {'vertical', 'active'}
 
     def __init__(self):
         super().__init__()
 
         self.options = []
         self.vertical = True
+        self.active = 1
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'vertical':
             self.vertical = self.strAttrToBool(ns, vs)
+        elif ns == 'active':
+            # проверка максимального значения будет в методе checkParameters(),
+            # т.к. количество option будет известно только тогда
+            self.active = self.strAttrToInt(ns, vs, minv=1)
 
     def checkParameters(self):
-        if len(self.children) < 2:
+        lc = len(self.children)
+        if lc < 2:
             raise ValueError('%s must contain at least two options' % self.__class__.__name__)
+
+        if self.active > lc:
+            raise ValueError('"active" value out of range')
 
 
 class SwitchOption(NamedControl):
@@ -346,7 +362,6 @@ class Level(Regulator):
 
     TAG = 'level'
     OPTIONS = Regulator.OPTIONS | {'value', 'steps', 'vertical'}
-    CHANNELS = 1
 
     def __init__(self):
         super().__init__()
@@ -354,6 +369,9 @@ class Level(Regulator):
         self.value = 0
         self.steps = 0
         self.vertical = True
+
+    def getNChannels(self):
+        return 1
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -369,12 +387,14 @@ class Level(Regulator):
 class ColorLevel(Level):
     TAG = 'colorlevel'
     OPTIONS = Level.OPTIONS | {'color'}
-    CHANNELS = 3
 
     def __init__(self):
         super().__init__()
 
         self.color = '#000000'
+
+    def getNChannels(self):
+        return 3
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -397,13 +417,16 @@ class DMXControls(Container, xml.sax.ContentHandler):
             super().__init__('Error at position %s of file "%s": %s' % (loader.getLocatorStr(), loader.filename, msg))
 
     class __StkItem():
-        __slots__ = 'name', 'obj'
-
         def __init__(self, n, o):
             super().__init__()
 
             self.name = n
             self.obj = o
+
+        def __repr__(self):
+            return '%s(name="%s", obj="%s")' % (self.__class__.__name__,
+                self.name,
+                self.obj.__class__.__name__ if self.obj else 'None')
 
     def __init__(self, filename):
         super().__init__()
@@ -456,6 +479,7 @@ class DMXControls(Container, xml.sax.ContentHandler):
         self.stack.append(self.stackTop)
         stackLen = len(self.stack)
         #
+        #print(f'\033[32m%sstartElement({name})\033[0m' % (' ' * stackLen))
 
         def checkParent(parents):
             if self.getParent().name not in parents:
@@ -503,7 +527,7 @@ class DMXControls(Container, xml.sax.ContentHandler):
                     # глобальный счётчик изменяют только активные контролы,
                     # т.к. контейнеры сами каналов не занимают, только
                     # хранят начальное значение канала для вложенных контролов
-                    self.curChannel += self.stackTop.obj.CHANNELS
+                    self.curChannel += self.stackTop.obj.getNChannels()
 
             except Exception as ex:
                 raise self.Error(self, str(ex)) from ex
@@ -542,14 +566,19 @@ class DMXControls(Container, xml.sax.ContentHandler):
                     raise self.Error(self, 'unsupported tag "%s"' % name)
 
     def endElement(self, name):
+        #
+        self.stackTop = self.stack.pop() if self.stack else None
+
+        #indent = '  ' * len(self.stack)
+        #print(f'\033[32m%sendElement({name}): %s\033[0m' % (
+        #      indent,
+        #      self.stackTop))
         if self.stackTop.obj:
             try:
                 self.stackTop.obj.checkParameters()
             except Exception as ex:
                 raise self.Error(self, str(ex)) from ex
 
-        #
-        self.stackTop = self.stack.pop() if self.stack else None
 
     def characters(self, s):
         s = s.strip()

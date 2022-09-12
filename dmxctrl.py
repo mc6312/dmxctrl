@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.8%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.9%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -94,10 +94,34 @@ class ControlWidget():
 
         raise NotImplementedError('%s.create_widgets() not implemented' % self.__class__.__name__)
 
+    def format_tooltip_text(self, control):
+        cstr = control.getCommentStr()
+        if cstr:
+            cstr = '%s\n\n' % cstr
+
+        if DEBUG:
+            cstr = '%s\n\n%s' % (cstr, control)
+
+        return '%sChannel: %d' % (cstr, control.channel)
+
+    def set_tooltip_text(self, widget, control):
+        widget.set_tooltip_text(self.format_tooltip_text(control))
+
     def value_changed(self, widget):
         """Метод должен вызываться при изменении значения (положения
-        движка и т.п.). Также он вызывается из конструктора после
-        создания всех виджетов и установки значений атрибутов.
+        движка и т.п.), т.е. это обработчик соответствующего сигнала виджета.
+        Также он вызывается из конструктора после создания всех виджетов
+        и установки значений атрибутов.
+
+        Параметры:
+            param   - экземпляр Gtk.Widget в случае вызова в качестве
+                      обработчика сигнала виджета;
+                      None при вызове из конструктора ControlWidget.
+
+        Конкретные реализации метода могут иметь больше параметров,
+        т.к. некоторые виджеты Gtk передают более одного параметра
+        обработчику сигнала. Первым параметром передаётся экземпляр Gtk.Widget.
+
         Для отсылки значений каналов устройствам в конкретной реализации
         этого метода должен быть вызов self.owner.set_channel_values().
         Метод должен быть перекрыт классом-потомком."""
@@ -117,7 +141,7 @@ class ControlWidget():
 
         # первый вызов - начальные значения уровней в каналах
         # загружены из файла, и их следует сразу послать устройствам
-        self.value_changed(self)
+        self.value_changed(None)
 
     def setMinLevel(self):
         """Установка максимального значения"""
@@ -147,7 +171,7 @@ class PanelWidget(ControlWidget):
             self.widget.set_label_widget(lbox)
 
         self.widget.set_label_align(0.5, 0.5)
-        self.widget.set_tooltip_text(self.control.getCommentStr())
+        self.set_tooltip_text(self.widget, self.control)
 
         self.box = Gtk.Box.new(bool_gtk_orientation(self.control.vertical),
                            WIDGET_SPACING)
@@ -167,6 +191,7 @@ class SwitchWidget(ControlWidget):
 
         if self.control.name or self.control.icon:
             self.widget = Gtk.Box.new(_ornt, WIDGET_SPACING)
+            self.set_tooltip_text(self.widget, self.control)
 
             if self.control.icon:
                 self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
@@ -178,26 +203,73 @@ class SwitchWidget(ControlWidget):
         else:
             self.widget = swbox
 
+        # словарь, где ключи - ссылки на экземпляры Gtk.RadioButton,
+        # а значения - соответствующие им значения для каналов
+        # т.к. предполагается, что будет использован Python 3.6 или новее,
+        # будем надеяться, что словарь сохранит элементы
+        # в той же очерёдности, что и при добавлении
+        self.radioButtons = dict()
+        self.activeButton = None
+
+        minValue = 255
+        self.minButton = None
+        maxValue = 0
+        self.maxButton = None
+
         rgrp = None
-        for opt in self.control.children:
+
+        for ixo, opt in enumerate(self.control.children, 1):
             rbtn = Gtk.RadioButton.new_with_label_from_widget(rgrp, opt.name)
+
+            if ixo == self.control.active:
+                #TODO доделать правильный выбор активной кнопки
+                self.activeButton = rbtn
+
+            if opt.value < minValue:
+                minValue = opt.value
+                self.minButton = rbtn
+
+            if opt.value > maxValue:
+                maxValue = opt.value
+                self.maxButton = rbtn
+
             rbtn.set_mode(False)
             if opt.icon:
                 rbtn.set_image(self.owner.load_icon_image(opt))
 
             if opt.comments:
-                rbtn.set_tooltip_text(''.join(opt.comments))
+                self.set_tooltip_text(rbtn, opt)
 
             if not rgrp:
                 rgrp = rbtn
 
-            rbtn.connect('toggled', self.value_changed, opt.value)
+            self.radioButtons[rbtn] = opt.value
+
+            rbtn.connect('toggled', self.value_changed)
 
             swbox.pack_start(rbtn, False, False, 0)
 
-    def value_changed(self, widget, value=None):
-        if value is not None and widget.get_active():
-            self.owner.set_channel_values(self.control.channel, [value])
+        self.activeButton.set_active(True)
+
+    def value_changed(self, rbtn):
+        if rbtn is None:
+            rbtn = self.activeButton
+        elif not rbtn.get_active():
+            return
+
+        self.owner.set_channel_values(self.control.channel,
+                                      [self.radioButtons[rbtn]])
+        self.activeButton = rbtn
+
+    def setMinLevel(self):
+        """Установка максимального значения"""
+
+        self.minButton.set_active(True)
+
+    def setMaxLevel(self):
+        """Установка минимального значения"""
+
+        self.maxButton.set_active(True)
 
 
 class LevelWidget(ControlWidget):
@@ -213,14 +285,13 @@ class LevelWidget(ControlWidget):
 
         self.widget = Gtk.Box.new(_ornt, WIDGET_SPACING)
 
-        tts = self.control.getCommentStr()
+        self.set_tooltip_text(self.widget, self.control)
 
         if self.control.icon:
             self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
 
         if self.control.name:
             slab = Gtk.Label.new(self.control.name)
-            slab.set_tooltip_text(tts)
             if self.control.vertical and (len(self.control.name) > 2):
                 slab.set_angle(270)
 
@@ -240,7 +311,6 @@ class LevelWidget(ControlWidget):
 
         self.scale = Gtk.Scale.new(_ornt, None)
         self.scale.set_size_request(scmincx, scmincy)
-        self.scale.set_tooltip_text(tts)
         self.scale.set_draw_value(False)
         self.scale.set_inverted(self.control.vertical)
 
