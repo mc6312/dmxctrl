@@ -58,7 +58,12 @@ class Control():
         PARAMETERS = set()      - множество строк - имена обязательных
                                   параметров;
         OPTIONS = {'channel'}   - множество строк - имена необязательных
-                                  параметров.
+                                  параметров;
+        USE_PARENT_CHANNEL      - булевское значение;
+                                  управляет присвоением значения атрибуту
+                                  channel при загрузке файла описания
+                                  консоли, если он не указан явно
+                                  (см. описание атрибута channel).
         Атрибуты, содержащие множества, должны дополняться или
         перекрываться в классе-потомке, прочие - должны перекрываться.
 
@@ -77,7 +82,9 @@ class Control():
                       1. явно указано в файле соответствующим атрибутом;
                       2. задано на основе счётчика (в т.ч. инициализированного
                          значением родительского Control'а);
-                      окончательное присваивание значений производится
+                      3. используется значение "родительского" Control'а,
+                         если атрибут класса USE_PARENT_CHANNEL равен True.
+                      Окончательное присваивание значений производится
                       в методе DMXControls.endElement() (аналогично атрибутам
                       NamedControl.name), т.е. после завершения загрузки
                       все важные атрибуты будут так или иначе заданы;
@@ -88,6 +95,7 @@ class Control():
     PARENTS = set()
     PARAMETERS = set()
     OPTIONS = {'channel'}
+    USE_PARENT_CHANNEL = False
 
     def __init__(self):
         # конструкторы задают значения атрибутов по умолчанию,
@@ -138,6 +146,22 @@ class Control():
             raise ValueError('attribute "%s" is out of range' % ns)
 
         return v
+
+    def strAttrToIntList(self, ns, vs, strict=True, minv=None, maxv=None):
+        """Преобразование строкового значения атрибута в список целых.
+
+        Параметры:
+            vs      - список целых, разделенных пробелами;
+            прочие параметры такие же, как у метода strAttrToInt.
+
+        Метод возвращает список целых."""
+
+        r = []
+
+        for vix, vss in enumerate(vs.split(None), 1):
+            r.append(self.strAttrToInt('%s:%d' % (ns, vix), vss, strict, minv, maxv))
+
+        return r
 
     def strAttrToBool(self, ns, vs):
         """Преобразование строкового значения атрибута в булевское.
@@ -292,17 +316,28 @@ class Switch(Regulator):
     Атрибуты экземпляра класса (в дополнение к унаследованным):
         vertical    - булевское значение; если равно True -
                       движок вертикальный;
-                      значение по умолчанию - True."""
+                      значение по умолчанию - True;
+        active      - целое, номер активной "кнопки" (элемента
+                      из списка children);
+                      по умолчанию - 1;
+        nchannels   - количество каналов DMX512, значения которых
+                      изменяет Switch;
+                      по умолчанию - 1;
+        Список значений для выбора (экземпляров SwitchOption) хранится
+        в атрибуте children."""
 
     TAG = 'switch'
-    OPTIONS = Regulator.OPTIONS | {'vertical', 'active'}
+    OPTIONS = Regulator.OPTIONS | {'vertical', 'active', 'nchannels'}
 
     def __init__(self):
         super().__init__()
 
-        self.options = []
         self.vertical = True
         self.active = 1
+        self.nchannels = 1
+
+    def getNChannels(self):
+        return self.nchannels
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -313,35 +348,49 @@ class Switch(Regulator):
             # проверка максимального значения будет в методе checkParameters(),
             # т.к. количество option будет известно только тогда
             self.active = self.strAttrToInt(ns, vs, minv=1)
+        elif ns == 'nchannels':
+            self.nchannels = self.strAttrToInt(ns, vs, minv=1, maxv=512)
 
     def checkParameters(self):
         lc = len(self.children)
         if lc < 2:
             raise ValueError('%s must contain at least two options' % self.__class__.__name__)
 
+        for ixo, opt in enumerate(self.children, 1):
+            if len(opt.value) != self.nchannels:
+                raise ValueError('option #%d has the wrong number of channel values in attribute "value"' % ixo)
+
         if self.active > lc:
             raise ValueError('"active" value out of range')
 
 
 class SwitchOption(NamedControl):
+    """Значение для выбора переключателем готовых значений (Switch).
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        value   - список из одного и более целых - значения для каналов
+                  DMX512, изменяемых Switch;
+                  значение по умолчанию - [0]."""
+
     TAG = 'option'
     PARENTS = {'switch'}
     PARAMETERS = NamedControl.PARAMETERS | {'value'}
+    USE_PARENT_CHANNEL = True
 
     def __init__(self):
         super().__init__()
 
-        self.value = 0
+        self.value = [0]
 
     def __repr__(self):
-        return '%s(name="%s", value=%d, icon="%s")' % (self.__class__.__name__,
+        return '%s(name="%s", value=%s, icon="%s")' % (self.__class__.__name__,
                     self.name, self.value, self.icon)
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'value':
-            self.value = self.strAttrToInt(ns, vs, minv=0, maxv=255)
+            self.value = self.strAttrToIntList(ns, vs, minv=0, maxv=255)
 
 
 class Level(Regulator):
@@ -520,8 +569,14 @@ class DMXControls(Container, xml.sax.ContentHandler):
                     # если канал задан явно - меняем значение глобального атрибута
                     self.curChannel = self.stackTop.obj.channel
                 else:
-                    # иначе - задаём атрибут "channel" текущему объекту на основе глобального
-                    self.stackTop.obj.channel = self.curChannel
+                    # иначе - задаём атрибут "channel" текущему объекту
+                    # принудительно
+                    if self.stackTop.obj.USE_PARENT_CHANNEL:
+                        prnt = self.getParent()
+
+                        self.stackTop.obj.channel = prnt.obj.channel if prnt else self.curChannel
+                    else:
+                        self.stackTop.obj.channel = self.curChannel
 
                 if isinstance(self.stackTop.obj, Regulator):
                     # глобальный счётчик изменяют только активные контролы,

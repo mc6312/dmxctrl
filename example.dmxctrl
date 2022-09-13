@@ -9,20 +9,20 @@
     </panel>
     <panel name="Other panel" vertical="True">
         <level steps="1" vertical="False">Движок чего-то</level>
-        <switch name="Switch" vertical="False" active="2">
-            <option name="min" icon="!black" value="0">Минимальное значение</option>
-            <option name="mid" value="128">Среднее значение</option>
-            <option name="max" icon="!white" value="255">Максимальное значение</option>
+        <switch name="Switch" vertical="False" active="2" nchannels="3">
+            <option name="min" icon="!black" value="0 0 0">Минимальное значение</option>
+            <option name="mid" value="128 128 128">Среднее значение</option>
+            <option name="max" icon="!white" value="255 255 255">Максимальное значение</option>
         </switch>
         <panel name="Sub panel" vertical="True">
-            <level name="R" channel="100" vertical="False"/>
-                <!-- Элементы, следующие за этим, будут использовать
-                каналы 101 и далее! -->
+            <level name="R" vertical="False"/>
             <level name="G" vertical="False"/>
             <level name="B" vertical="False"/>
         </panel>
     </panel>
-    <level name="Something" value="128" steps="8">
+    <level name="Something" value="128" steps="8" channel="100">
+        <!-- Элементы, следующие за этим, будут использовать
+        каналы 101 и далее! -->
     </level>
     <panel>
         <colorlevel name="CL1" color="#FF8000">

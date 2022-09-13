@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.10%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.11%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -210,9 +210,9 @@ class SwitchWidget(ControlWidget):
         self.radioButtons = dict()
         self.activeButton = None
 
-        minValue = 255
+        minValue = [255] * self.control.nchannels
         self.minButton = None
-        maxValue = 0
+        maxValue = [0] * self.control.nchannels
         self.maxButton = None
 
         rgrp = None
@@ -257,7 +257,7 @@ class SwitchWidget(ControlWidget):
             return
 
         self.owner.set_channel_values(self.control.channel,
-                                      [self.radioButtons[rbtn]])
+                                      self.radioButtons[rbtn])
         self.activeButton = rbtn
 
     def setMinLevel(self):
