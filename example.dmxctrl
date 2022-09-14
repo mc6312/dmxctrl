@@ -14,6 +14,14 @@
             <option name="mid" value="128 128 128">Среднее значение</option>
             <option name="max" icon="!white" value="255 255 255">Максимальное значение</option>
         </switch>
+        <switch name="Big switch" vertical="True">
+            <option name="1" value="0"/>
+            <option name="2" value="16"/>
+            <option name="3" value="32"/>
+            <option name="4" value="64"/>
+            <option name="5" value="128"/>
+            <option name="6" value="255"/>
+        </switch>
         <panel name="Sub panel" vertical="True">
             <level name="R" vertical="False"/>
             <level name="G" vertical="False"/>

@@ -22,7 +22,7 @@
 DEBUG = False
 
 TITLE = 'DMXCtrl'
-VERSION = '0.11%s' % (' [DEBUG]' if DEBUG else '')
+VERSION = '0.12%s' % (' [DEBUG]' if DEBUG else '')
 TITLE_VERSION = '%s v%s' % (TITLE, VERSION)
 COPYRIGHT = '🄯 2022 MC-6312'
 URL = 'https://github.com/mc6312/dmxctrl'
@@ -185,8 +185,26 @@ class SwitchWidget(ControlWidget):
     def setup(self):
         _ornt = bool_gtk_orientation(self.control.vertical)
 
-        swbox = Gtk.Box.new(_ornt, 0)
-        swbox.get_style_context().add_class('linked')
+        #!!!!
+        self.buttonsPerLine = 3
+
+        swbox = Gtk.Grid.new()
+        swbox.set_column_homogeneous(True)
+        swbox.set_row_homogeneous(True)
+
+        nbuttons = len(self.control.children)
+
+        if self.buttonsPerLine <= 0:
+            ncols = self.buttonsPerLine
+            nrows = 1
+        else:
+            ncols = self.buttonsPerLine
+            nrows = nbuttons // ncols
+            if nbuttons % ncols:
+                nrows += 1
+
+        if self.control.vertical:
+            nrows, ncols = ncols, nrows
 
         if self.control.name or self.control.icon:
             self.widget = Gtk.Box.new(_ornt, WIDGET_SPACING)
@@ -217,36 +235,53 @@ class SwitchWidget(ControlWidget):
 
         rgrp = None
 
-        for ixo, opt in enumerate(self.control.children, 1):
-            rbtn = Gtk.RadioButton.new_with_label_from_widget(rgrp, opt.name)
+        #
+        #
+        #
+        print(f'{self.control.name=}: {self.control.vertical=}, {nrows=}, {ncols=}')
 
-            if ixo == self.control.active:
-                #TODO доделать правильный выбор активной кнопки
-                self.activeButton = rbtn
+        ixo = 0
+        rowsbl = None
+        for row in range(nrows):
+            sblwgt = rowsbl
+            gpos = Gtk.PositionType.BOTTOM
 
-            if opt.value < minValue:
-                minValue = opt.value
-                self.minButton = rbtn
+            for col in range(ncols):
+                if ixo < nbuttons:
+                    opt = self.control.children[ixo]
+                    ixo += 1
 
-            if opt.value > maxValue:
-                maxValue = opt.value
-                self.maxButton = rbtn
+                    rbtn = Gtk.RadioButton.new_with_label_from_widget(rgrp, opt.name)
 
-            rbtn.set_mode(False)
-            if opt.icon:
-                rbtn.set_image(self.owner.load_icon_image(opt))
+                    if ixo == self.control.active:
+                        self.activeButton = rbtn
 
-            if opt.comments:
-                self.set_tooltip_text(rbtn, opt)
+                    if opt.value < minValue:
+                        minValue = opt.value
+                        self.minButton = rbtn
 
-            if not rgrp:
-                rgrp = rbtn
+                    if opt.value > maxValue:
+                        maxValue = opt.value
+                        self.maxButton = rbtn
 
-            self.radioButtons[rbtn] = opt.value
+                    rbtn.set_mode(False)
+                    if opt.icon:
+                        rbtn.set_image(self.owner.load_icon_image(opt))
 
-            rbtn.connect('toggled', self.value_changed)
+                    if opt.comments:
+                        self.set_tooltip_text(rbtn, opt)
 
-            swbox.pack_start(rbtn, False, False, 0)
+                    if not rgrp:
+                        rgrp = rbtn
+
+                    self.radioButtons[rbtn] = opt.value
+
+                    rbtn.connect('toggled', self.value_changed)
+
+                    sblwgt = swbox.attach_next_to(rbtn, sblwgt, gpos, 1, 1)
+                    gpos = Gtk.PositionType.RIGHT
+                    if col == 0:
+                        rowsbl = sblwgt
 
         self.activeButton.set_active(True)
 
