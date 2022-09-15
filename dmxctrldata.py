@@ -18,33 +18,99 @@
 
 
 import xml.sax
-
-from gi import require_version as gi_require_version
-gi_require_version('Gdk', '3.0')
-from gi.repository.Gdk import RGBA
-
+from colorsys import hls_to_rgb
 import os.path
 
 
 # значения цветов для встроенной палитры и иконок
 HUE_BLACK = -1
-HUE_WHITE = -2
-__HUE_360 = 1.0 / 360
+HUE_GRAY = -2
+HUE_WHITE = -3
+PALETTE_SPECIAL_COLORS = (HUE_BLACK, HUE_GRAY, HUE_WHITE)
+
+grad_to_hue = lambda g: g / 360.0
+
 PALETTE_HUE_NAMES = {
     'black':        HUE_BLACK,
-    'red':          0   * __HUE_360,
-    'orange':       30  * __HUE_360,
-    'yellow':       60  * __HUE_360,
-    'yellowgreen':  90  * __HUE_360,
-    'green':        120 * __HUE_360,
-    'greenblue':    160 * __HUE_360,
-    'cyan':         180 * __HUE_360,
-    'deepblue':     210 * __HUE_360,
-    'blue':         240 * __HUE_360,
-    'purple':       260 * __HUE_360,
-    'magenta':      300 * __HUE_360,
+    'gray':         HUE_GRAY,
     'white':        HUE_WHITE,
+    'red':          grad_to_hue(0),
+    'orange':       grad_to_hue(30),
+    'yellow':       grad_to_hue(60),
+    'yellowgreen':  grad_to_hue(90),
+    'green':        grad_to_hue(120),
+    'greenblue':    grad_to_hue(160),
+    'cyan':         grad_to_hue(180),
+    'deepblue':     grad_to_hue(210),
+    'blue':         grad_to_hue(240),
+    'purple':       grad_to_hue(260),
+    'magenta':      grad_to_hue(300),
     }
+
+
+def hue_to_rgb1(hue, saturation=1.0):
+    """Преобразование значения оттенка с указанной насыщенностью
+    в значения R, G, B в диапазоне 0.0-1.0.
+
+    hue         - float, оттенок в диапазоне 0.0-1.0
+                  или код цвета HUE_*;
+    saturation  - float, насыщенность в диапазоне 0.0-1.0;
+                  если hue=HUE_*, параметр saturation не используется.
+
+    Возвращает список из трёх float."""
+
+    if hue == HUE_BLACK:
+        return 0, 0, 0
+    elif hue == HUE_WHITE:
+        return 1.0, 1.0, 1.0
+    elif hue == HUE_GRAY:
+        return 0.5, 0.5, 0.5
+
+    return hls_to_rgb(hue, 0.5, saturation)
+
+
+def repr_to_str(obj):
+    """Форматирование строки с именем класса и значениями полей экземпляра
+    класса для использования в методах obj.__repr__().
+
+    Параметры:
+        obj - экземпляр произвольного класса.
+
+    Функция возвращает строку."""
+
+    r = []
+
+    def __repr_item(ni, vi):
+        if isinstance(vi, str):
+            rv = '"%s"' % vi
+        elif isinstance(vi, (int, float, bool)):
+            rv = str(vi)
+        else:
+            try:
+                # если это что-то спискообразное - показываем
+                # только имя типа и количество элементов
+                lvi = len(vi)
+                rv = '%s(%s)' % (type(vi).__name__,
+                                 '' if not lvi else '%d item(s)' % lvi)
+            except TypeError:
+                # т.к. объекты могут содержать поля, ссылающиеся
+                # на другие объекты, можно получить бесконечную рекурсию
+                # а потому для вс
+                rv = '<%s>' % type(vi).__name__
+
+        return '%s=%s' % (ni, rv)
+
+    d = getattr(obj, '__dict__', None)
+    if d:
+        for k, v in d.items():
+            r.append(__repr_item(k, v))
+
+    d = getattr(obj, '__slots__', None)
+    if d:
+        for k in d:
+            r.append(__repr_item(k, getattr(obj, k)))
+
+    return '%s(%s)' % (obj.__class__.__name__, ', '.join(r))
 
 
 class Control():
@@ -58,7 +124,12 @@ class Control():
         PARAMETERS = set()      - множество строк - имена обязательных
                                   параметров;
         OPTIONS = {'channel'}   - множество строк - имена необязательных
-                                  параметров.
+                                  параметров;
+        USE_PARENT_CHANNEL      - булевское значение;
+                                  управляет присвоением значения атрибуту
+                                  channel при загрузке файла описания
+                                  консоли, если он не указан явно
+                                  (см. описание атрибута channel).
         Атрибуты, содержащие множества, должны дополняться или
         перекрываться в классе-потомке, прочие - должны перекрываться.
 
@@ -77,17 +148,23 @@ class Control():
                       1. явно указано в файле соответствующим атрибутом;
                       2. задано на основе счётчика (в т.ч. инициализированного
                          значением родительского Control'а);
-                      окончательное присваивание значений производится
+                      3. используется значение "родительского" Control'а,
+                         если атрибут класса USE_PARENT_CHANNEL равен True.
+                      Окончательное присваивание значений производится
                       в методе DMXControls.endElement() (аналогично атрибутам
                       NamedControl.name), т.е. после завершения загрузки
                       все важные атрибуты будут так или иначе заданы;
+        expand      - булевское значение; если равен True - контрол
+                      занимает всё свободное место на консоли;
+                      по умолчанию - False;
         children    - список дочерних контролов (для потомков Container)
                       или список контролов с данными для самого контрола."""
 
     TAG = None
     PARENTS = set()
     PARAMETERS = set()
-    OPTIONS = {'channel'}
+    OPTIONS = {'channel', 'expand'}
+    USE_PARENT_CHANNEL = False
 
     def __init__(self):
         # конструкторы задают значения атрибутов по умолчанию,
@@ -96,6 +173,7 @@ class Control():
         self.comments = []
         self.channel = None
         self.children = []
+        self.expand = False
 
     def getNChannels(self):
         """Возвращает количество каналов, занимаемых контролом.
@@ -139,6 +217,92 @@ class Control():
 
         return v
 
+    def strAttrToIntList(self, ns, vs, strict=True, minv=None, maxv=None):
+        """Преобразование строкового значения атрибута в список целых.
+
+        Параметры:
+            vs      - список целых, разделенных пробелами;
+            прочие параметры такие же, как у метода strAttrToInt.
+
+        Метод возвращает список целых."""
+
+        r = []
+
+        for vix, vss in enumerate(vs.split(None), 1):
+            r.append(self.strAttrToInt('%s:%d' % (ns, vix), vss, strict, minv, maxv))
+
+        return r
+
+    def strAttrToRGB(self, ns, vs):
+        """Преобразование строкового значения атрибута, задающего цвет,
+        в список целых.
+
+        Параметры:
+            ns      - строка,  имя атрибута (для отображения в сообщениях
+                      об ошибках);
+            vs      - строка, значение атрибута, в формате:
+                      1. список из трех целых в диапазоне 0..255,
+                         разделённых пробелами;
+                      2. цвет в web-формате - "#RRGGBB", "#RGB";
+                      3. название цвета из внутренней палитры -
+                         PALETTE_HUE_NAMES;
+                      4. цвет в формате hls(hue, lightness, saturation)",
+                         где hue        - значение оттенка, 0..360;
+                             lightness  - значение светлоты, 0..100;
+                             saturation - значение насыщенности, 0..100).
+
+        Метод возвращает список из трёх целых."""
+
+        vs = vs.lower()
+
+        _error = 'invalid value of attribute "%s" - %%s' % ns
+
+        def __hex_to_rgb(s, mulv):
+            r = []
+            step = len(s) // 3
+            ix = 1 # пропускаем "#"!
+            for pn in 'RGB':
+                try:
+                    r.append(int(s[ix:ix + step], 16) * mulv)
+                except ValueError as ex:
+                    raise ValueError(_error % ('invalid %s:%s value' % (ns, pn))) from ex
+
+                ix += step
+
+            return r
+
+        if vs in PALETTE_HUE_NAMES:
+            # имя цвета
+            return list(map(lambda c: int(c * 255),
+                            hue_to_rgb1(PALETTE_HUE_NAMES[vs], 1.0)))
+        elif vs.startswith('#'):
+            # веб-формат "#RRGGBB"
+            lvs = len(vs)
+            if lvs == 4:
+                #RGB
+                return __hex_to_rgb(vs, 16)
+            elif lvs == 7:
+                #RRGGBB
+                return __hex_to_rgb(vs, 1)
+            else:
+                raise ValueError(_error % 'bad RGB value format')
+        elif vs.startswith('hls('):
+            # hls(h, l, s)
+            if not vs.endswith(')'):
+                raise ValueError(_error % 'brackets are not closed')
+
+            vs = list(map(lambda s: s.strip(), vs[4:-1].split(',')))
+            if len(vs) != 3:
+                raise ValueError(_error % 'invalid hls() parameters')
+
+            r, g, b = hls_to_rgb(self.strAttrToInt('%s:hue' % ns, vs[0], True, 0, 360) / 360.0,
+                                 self.strAttrToInt('%s:lightness' % ns, vs[1], True, 0, 100) / 100.0,
+                                 self.strAttrToInt('%s:saturation' % ns, vs[2], True, 0, 100) / 100.0)
+            return [int(r * 255), int(g * 255), int(b * 255)]
+        else:
+            # список целых?
+            return self.strAttrToIntList(ns, vs, True, 0, 255)
+
     def strAttrToBool(self, ns, vs):
         """Преобразование строкового значения атрибута в булевское.
 
@@ -172,6 +336,8 @@ class Control():
 
         if ns == 'channel':
             self.channel = self.strAttrToInt(ns, vs, False, 1, 512)
+        elif ns == 'expand':
+            self.expand = self.strAttrToBool(ns, vs)
 
     def getCommentStr(self):
         return ' '.join(self.comments)
@@ -183,6 +349,10 @@ class Control():
         Перекрывается при необходимости классом-потомком."""
 
         pass
+
+    def __repr__(self):
+        # для отладки
+        return repr_to_str(self)
 
 
 class NamedControl(Control):
@@ -292,17 +462,34 @@ class Switch(Regulator):
     Атрибуты экземпляра класса (в дополнение к унаследованным):
         vertical    - булевское значение; если равно True -
                       движок вертикальный;
-                      значение по умолчанию - True."""
+                      значение по умолчанию - True;
+        active      - целое, номер активной "кнопки" (элемента
+                      из списка children);
+                      по умолчанию - 1;
+        nchannels   - количество каналов DMX512, значения которых
+                      изменяет Switch;
+                      по умолчанию - 1;
+        bpl         - целое; количество "кнопок" в строке (или столбце,
+                      если vertical=True);
+                      значения <=0, "*" или "auto" означают, что
+                      кнопки будут расположены в одну строку или столбец
+                      без ограничения количества.
+        Список значений для выбора (экземпляров SwitchOption) хранится
+        в атрибуте children."""
 
     TAG = 'switch'
-    OPTIONS = Regulator.OPTIONS | {'vertical', 'active'}
+    OPTIONS = Regulator.OPTIONS | {'vertical', 'active', 'nchannels', 'bpl'}
 
     def __init__(self):
         super().__init__()
 
-        self.options = []
         self.vertical = True
         self.active = 1
+        self.nchannels = 1
+        self.buttonsPerLine = 0
+
+    def getNChannels(self):
+        return self.nchannels
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
@@ -313,35 +500,54 @@ class Switch(Regulator):
             # проверка максимального значения будет в методе checkParameters(),
             # т.к. количество option будет известно только тогда
             self.active = self.strAttrToInt(ns, vs, minv=1)
+        elif ns == 'nchannels':
+            self.nchannels = self.strAttrToInt(ns, vs, minv=1, maxv=512)
+        elif ns == 'bpl':
+            self.buttonsPerLine = self.strAttrToInt(ns, vs, strict=False)
 
     def checkParameters(self):
         lc = len(self.children)
         if lc < 2:
             raise ValueError('%s must contain at least two options' % self.__class__.__name__)
 
+        for ixo, opt in enumerate(self.children, 1):
+            if len(opt.value) != self.nchannels:
+                raise ValueError('option #%d has the wrong number of channel values in attribute "value"' % ixo)
+
         if self.active > lc:
             raise ValueError('"active" value out of range')
 
 
 class SwitchOption(NamedControl):
+    """Значение для выбора переключателем готовых значений (Switch).
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        value   - список из одного и более целых - значения для каналов
+                  DMX512, изменяемых Switch;
+                  методу setParameter может передаваться в нескольких
+                  форматах:
+                    1. список из одного и более целых, разделённых
+                       пробелами;
+                    2. цвет (сохраняются значения для трёх каналов);
+                       формат значения такой же, как у метода
+                       strArgToRGB.
+                  значение по умолчанию - [0]."""
+
     TAG = 'option'
     PARENTS = {'switch'}
     PARAMETERS = NamedControl.PARAMETERS | {'value'}
+    USE_PARENT_CHANNEL = True
 
     def __init__(self):
         super().__init__()
 
-        self.value = 0
-
-    def __repr__(self):
-        return '%s(name="%s", value=%d, icon="%s")' % (self.__class__.__name__,
-                    self.name, self.value, self.icon)
+        self.value = [0]
 
     def setParameter(self, ns, vs):
         super().setParameter(ns, vs)
 
         if ns == 'value':
-            self.value = self.strAttrToInt(ns, vs, minv=0, maxv=255)
+            self.value = self.strAttrToRGB(ns, vs)
 
 
 class Level(Regulator):
@@ -385,13 +591,20 @@ class Level(Regulator):
 
 
 class ColorLevel(Level):
+    """Движок-регулятор уровня с кнопкой выбора цвета.
+    Движок при этом регулирует яркость.
+
+    Атрибуты экземпляра класса (в дополнение к унаследованным):
+        color   - значение цвета в виде списка из трёх целых
+                  в диапазоне 0..255."""
+
     TAG = 'colorlevel'
     OPTIONS = Level.OPTIONS | {'color'}
 
     def __init__(self):
         super().__init__()
 
-        self.color = '#000000'
+        self.color = [0, 0, 0]
 
     def getNChannels(self):
         return 3
@@ -400,12 +613,7 @@ class ColorLevel(Level):
         super().setParameter(ns, vs)
 
         if ns == 'color':
-            #TODO возможно, стоит сделать более строгую проверку значения
-            if vs.startswith('#'):
-                if len(vs) not in (4, 7):
-                    raise ValueError('invalid color RGB value format')
-
-            self.color = vs
+            self.color = self.strAttrToRGB(ns, vs)
 
 
 class DMXControls(Container, xml.sax.ContentHandler):
@@ -424,9 +632,7 @@ class DMXControls(Container, xml.sax.ContentHandler):
             self.obj = o
 
         def __repr__(self):
-            return '%s(name="%s", obj="%s")' % (self.__class__.__name__,
-                self.name,
-                self.obj.__class__.__name__ if self.obj else 'None')
+            return repr_to_str(self)
 
     def __init__(self, filename):
         super().__init__()
@@ -520,8 +726,14 @@ class DMXControls(Container, xml.sax.ContentHandler):
                     # если канал задан явно - меняем значение глобального атрибута
                     self.curChannel = self.stackTop.obj.channel
                 else:
-                    # иначе - задаём атрибут "channel" текущему объекту на основе глобального
-                    self.stackTop.obj.channel = self.curChannel
+                    # иначе - задаём атрибут "channel" текущему объекту
+                    # принудительно
+                    if self.stackTop.obj.USE_PARENT_CHANNEL:
+                        prnt = self.getParent()
+
+                        self.stackTop.obj.channel = prnt.obj.channel if prnt else self.curChannel
+                    else:
+                        self.stackTop.obj.channel = self.curChannel
 
                 if isinstance(self.stackTop.obj, Regulator):
                     # глобальный счётчик изменяют только активные контролы,
@@ -597,22 +809,8 @@ if __name__ == '__main__':
     dmxc = DMXControls('example.dmxctrl')
     #print(help(dmxc))
 
-    def _dump_dict(d, indent):
-        r = []
-
-        for k, v in d.items():
-            r.append('%s%s="%s"' % ('%s - ' % indent, k, v))
-
-        return '\n'.join(r)
-
     def __dump_ctl(ctl, indent):
-        print('%s%s %s:"%s"%s %s' % (
-                indent,
-                '=' if isinstance(ctl, Container) else '>',
-                ctl.__class__.__name__,
-                ctl.name,
-                '' if not ctl.icon else ' (%s)' % ctl.icon,
-                _dump_dict(ctl.__dict__, indent)))
+        print('%s%s' % (indent, repr(ctl)))
 
         indent += ' '
 
@@ -620,6 +818,6 @@ if __name__ == '__main__':
             for c in ctl.children:
                 __dump_ctl(c, indent)
 
-    print('\033[1m%s\033[0m' % _dump_dict(dmxc.__dict__, ' '))
+    print('\033[1m%s\033[0m' % repr(dmxc))
     for un in dmxc.children:
         __dump_ctl(un, '')
