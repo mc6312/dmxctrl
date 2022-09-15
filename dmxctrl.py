@@ -45,15 +45,11 @@ from dmxctrlcfg import *
 from colorsys import hls_to_rgb
 
 
-COLORS_PALETTE_COLS = len(PALETTE_HUE_NAMES)
+COLORS_PALETTE_COLS = len(PALETTE_HUE_NAMES) - len(PALETTE_SPECIAL_COLORS)
+
 
 def hue_to_rgba(hue, saturation=1.0):
-    if hue == HUE_BLACK:
-        r, g, b = 0, 0, 0
-    elif hue == HUE_WHITE:
-        r, g, b = 1.0, 1.0, 1.0
-    else:
-        r, g, b = hls_to_rgb(hue, 0.5, saturation)
+    r, g, b = hue_to_rgb1(hue, saturation)
 
     return Gdk.RGBA(r, g, b, 1.0)
 
@@ -65,7 +61,12 @@ def __init_palette():
 
     for sat in range(__PALETTE_SATURATIONS):
         for hue in PALETTE_HUE_NAMES.values():
-            pal.append(hue_to_rgba(hue, 1.0 / (1 + sat)))
+            if hue not in PALETTE_SPECIAL_COLORS:
+                pal.append(hue_to_rgba(hue, 1.0 / (1 + sat)))
+
+    for l in range(COLORS_PALETTE_COLS):
+        v = 1.0 - l / COLORS_PALETTE_COLS
+        pal.append(Gdk.RGBA(v, v, v, 1.0))
 
     return pal
 
@@ -177,28 +178,30 @@ class PanelWidget(ControlWidget):
         self.box.set_border_width(WIDGET_SPACING)
         self.widget.add(self.box)
 
-    def add_child(self, cw):
-        self.box.pack_start(cw, False, False, 0)
+    def add_child(self, cwgt, cctrl):
+        self.box.pack_start(cwgt, cctrl.expand, cctrl.expand, 0)
 
 
 class SwitchWidget(ControlWidget):
     def setup(self):
         _ornt = bool_gtk_orientation(self.control.vertical)
 
-        #!!!!
-        self.buttonsPerLine = 3
-
         swbox = Gtk.Grid.new()
         swbox.set_column_homogeneous(True)
         swbox.set_row_homogeneous(True)
+        swbox.set_hexpand(self.control.expand)
+        swbox.set_vexpand(self.control.expand)
+        # на случай особо извращённых тем GTK
+        swbox.set_column_spacing(0)
+        swbox.set_row_spacing(0)
 
         nbuttons = len(self.control.children)
 
-        if self.buttonsPerLine <= 0:
-            ncols = self.buttonsPerLine
+        if self.control.buttonsPerLine <= 0:
+            ncols = nbuttons
             nrows = 1
         else:
-            ncols = self.buttonsPerLine
+            ncols = self.control.buttonsPerLine
             nrows = nbuttons // ncols
             if nbuttons % ncols:
                 nrows += 1
@@ -214,9 +217,11 @@ class SwitchWidget(ControlWidget):
                 self.widget.pack_start(self.owner.load_icon_image(self.control), False, False, 0)
 
             if self.control.name:
-                self.widget.pack_start(Gtk.Label.new(self.control.name), False, False, 0)
+                lab = Gtk.Label.new(self.control.name)
+                lab.set_line_wrap(True)
+                self.widget.pack_start(lab, False, False, 0)
 
-            self.widget.pack_start(swbox, False, False, 0)
+            self.widget.pack_start(swbox, self.control.expand, self.control.expand, 0)
         else:
             self.widget = swbox
 
@@ -228,18 +233,11 @@ class SwitchWidget(ControlWidget):
         self.radioButtons = dict()
         self.activeButton = None
 
-        minValue = [255] * self.control.nchannels
-        self.minButton = None
-        maxValue = [0] * self.control.nchannels
-        self.maxButton = None
-
         rgrp = None
 
         #
         #
         #
-        print(f'{self.control.name=}: {self.control.vertical=}, {nrows=}, {ncols=}')
-
         ixo = 0
         rowsbl = None
         for row in range(nrows):
@@ -252,17 +250,14 @@ class SwitchWidget(ControlWidget):
                     ixo += 1
 
                     rbtn = Gtk.RadioButton.new_with_label_from_widget(rgrp, opt.name)
+                    # для борьбы с авторами тем, которые шибко любят
+                    # закруглять углы у всего подряд надругаемся над css;
+                    # слитно расположенные кнопки со скруглёнными углами
+                    # выглядят отвратно, потому кнопки будут квадратные
+                    set_widget_style(b'* { border-radius:0 }', rbtn)
 
                     if ixo == self.control.active:
                         self.activeButton = rbtn
-
-                    if opt.value < minValue:
-                        minValue = opt.value
-                        self.minButton = rbtn
-
-                    if opt.value > maxValue:
-                        maxValue = opt.value
-                        self.maxButton = rbtn
 
                     rbtn.set_mode(False)
                     if opt.icon:
@@ -278,10 +273,15 @@ class SwitchWidget(ControlWidget):
 
                     rbtn.connect('toggled', self.value_changed)
 
-                    sblwgt = swbox.attach_next_to(rbtn, sblwgt, gpos, 1, 1)
-                    gpos = Gtk.PositionType.RIGHT
+                    swbox.attach_next_to(rbtn, sblwgt, gpos, 1, 1)
+                    sblwgt = rbtn
                     if col == 0:
                         rowsbl = sblwgt
+                        gpos = Gtk.PositionType.RIGHT
+
+        _rbtns = list(self.radioButtons.keys())
+        self.minButton = _rbtns[0]
+        self.maxButton = _rbtns[-1]
 
         self.activeButton.set_active(True)
 
@@ -377,8 +377,10 @@ class ColorLevelWidget(LevelWidget):
     def setup(self):
         super().setup()
 
-        rgba = Gdk.RGBA()
-        rgba.parse(self.control.color)
+        rgba = Gdk.RGBA(self.control.color[0] / 255,
+                        self.control.color[1] / 255,
+                        self.control.color[2] / 255,
+                        1.0)
 
         self.clrbtn = Gtk.ColorButton.new_with_rgba(rgba)
         self.clrbtn.add_palette(Gtk.Orientation.VERTICAL, 1, None)
@@ -436,7 +438,7 @@ class MainWnd():
             'swndControls', 'vpControls')
 
         #
-        print('DMX client wrapper initialization...', file=sys.stderr)
+        print('Connecting to OLA daemon...', file=sys.stderr)
         try:
             from ola.ClientWrapper import ClientWrapper
             self.wrapper = ClientWrapper()
@@ -708,7 +710,7 @@ class MainWnd():
             if isinstance(ctrl, Container):
                 for child in ctrl.children:
                     subwgt = _build_console_widgets(child)
-                    cwgt.add_child(subwgt)
+                    cwgt.add_child(subwgt, child)
 
             return cwgt.widget
 

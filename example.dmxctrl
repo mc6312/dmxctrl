@@ -1,41 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<dmxcontrols name="Example console">
+<dmxcontrols name="Пример консоли">
     Пример описания консоли<br/>ажно из двух строк
-    <panel name="Test panel" icon="@example_icon.svg">
+    <panel name="Панель 1" icon="@example_icon.svg">
         Панель с тремя движками
         <level icon="!red"/>
         <level icon="!green"/>
         <level icon="!blue"/>
     </panel>
-    <panel name="Other panel" vertical="True">
+    <panel name="Другая панель" vertical="True">
         <level steps="1" vertical="False">Движок чего-то</level>
-        <switch name="Switch" vertical="False" active="2" nchannels="3">
-            <option name="min" icon="!black" value="0 0 0">Минимальное значение</option>
-            <option name="mid" value="128 128 128">Среднее значение</option>
-            <option name="max" icon="!white" value="255 255 255">Максимальное значение</option>
+        <switch name="Переключатель" vertical="False" active="2" nchannels="3" expand="True">
+            <option icon="!black" value="0 0 0">Минимальное значение</option>
+            <option icon ="!gray" value="128 128 128">Среднее значение</option>
+            <option icon="!white" value="255 255 255">Максимальное значение</option>
         </switch>
-        <switch name="Big switch" vertical="True">
-            <option name="1" value="0"/>
-            <option name="2" value="16"/>
-            <option name="3" value="32"/>
-            <option name="4" value="64"/>
-            <option name="5" value="128"/>
-            <option name="6" value="255"/>
+        <switch name="Большой переключатель" vertical="False" nchannels="3" bpl="4">
+            <option icon="!red" value="red"/>
+            <option icon="!green" value="green"/>
+            <option icon="!blue" value="blue"/>
+            <option icon="!white" value="white"/>
+            <option icon="!orange" value="orange"/>
+            <option icon="!magenta" value="magenta"/>
+            <option icon="!purple" value="purple"/>
+            <option icon="!deepblue" value="deepblue"/>
         </switch>
-        <panel name="Sub panel" vertical="True">
+        <panel name="Вложенная панель" vertical="True">
             <level name="R" vertical="False"/>
             <level name="G" vertical="False"/>
             <level name="B" vertical="False"/>
         </panel>
     </panel>
-    <level name="Something" value="128" steps="8" channel="100">
-        <!-- Элементы, следующие за этим, будут использовать
-        каналы 101 и далее! -->
-    </level>
+    <level name="Что-то" value="128" steps="8" channel="100"/>
+    <!-- Элементы, следующие за этим, будут использовать
+    каналы 101 и далее! -->
     <panel>
-        <colorlevel name="CL1" color="#FF8000">
-            Движок с выбором цвета из палитры
-        </colorlevel>
-        <colorlevel name="CL2" color="#0080FF" steps="1" />
+        <colorlevel name="CL1" color="#FF8000">Движок с выбором цвета из палитры</colorlevel>
+        <colorlevel name="CL2" color="deepblue" steps="1" />
     </panel>
 </dmxcontrols>
